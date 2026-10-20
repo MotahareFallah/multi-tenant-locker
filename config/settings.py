@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -76,3 +77,6 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
+
+AUTH_USER_MODEL = "accounts.User"
+PHONE_DEFAULT_REGION = env("PHONE_DEFAULT_REGION", default="IR")
