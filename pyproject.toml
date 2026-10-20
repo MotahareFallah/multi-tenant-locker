@@ -21,6 +21,7 @@ dev = [
 ]
 
 [tool.ruff]
+extend-exclude = ["*/migrations/*"]
 line-length = 88
 target-version = "py312"
 
