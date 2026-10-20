@@ -43,7 +43,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] Project skeleton (uv, Django, DRF, SimpleJWT)
 - [x] PostgreSQL and Redis via Docker Compose
 - [x] Settings loaded from environment
-- [ ] CI (lint, migration check, tests)
+- [x] CI (lint, migration check, tests)
 - [ ] Tenancy architecture decision (ADR-0001)
 - [ ] Tenant provisioning and context management
 - [ ] Users, memberships and RBAC
