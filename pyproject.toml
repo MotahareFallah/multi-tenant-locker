@@ -8,6 +8,7 @@ dependencies = [
     "django-environ>=0.14.0",
     "djangorestframework>=3.17.2",
     "djangorestframework-simplejwt>=5.5.1",
+    "phonenumbers>=9.0.41",
     "psycopg[binary]>=3.3.6",
     "redis>=8.1.0",
 ]
@@ -20,6 +21,7 @@ dev = [
 ]
 
 [tool.ruff]
+extend-exclude = ["*/migrations/*"]
 line-length = 88
 target-version = "py312"
 
