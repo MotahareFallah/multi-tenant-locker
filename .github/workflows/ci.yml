@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: lockerdb
+          POSTGRES_USER: locker
+          POSTGRES_PASSWORD: locker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U locker -d lockerdb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret
+      DATABASE_URL: postgres://locker:locker@localhost:5432/lockerdb
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check .
+      - name: Check for missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run
+      - name: Django system check
+        run: uv run python manage.py check --database default
+      - name: Tests
+        run: uv run pytest
