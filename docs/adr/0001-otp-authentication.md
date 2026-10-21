@@ -98,3 +98,13 @@ itself, create organization permissions.
   module that raises is reported as `accounts.E008` instead of a traceback.
 - **SQLite is not supported.** This is a deliberate choice: the concurrency
   guarantees depend on PostgreSQL, and the tests run against it.
+
+## Notes for the HTTP layer
+
+- The service accepts ASCII digits only. The API layer will normalize Persian and
+  Arabic-Indic digits to ASCII (users may type them) and validate the input shape
+  before calling the service. The service still treats anything malformed as a
+  counted wrong guess.
+- Duplicate-phone detection relies on psycopg 3 (`.sqlstate`, `.diag`) and on the
+  PostgreSQL constraint name `accounts_user_phone_number_key`; a database test
+  pins that name.
