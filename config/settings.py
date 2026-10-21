@@ -94,3 +94,7 @@ SMS_TIMEOUT = env.float("SMS_TIMEOUT", default=5.0)
 SMS_PHONE_FIELD = env("SMS_PHONE_FIELD", default="to")
 SMS_MESSAGE_FIELD = env("SMS_MESSAGE_FIELD", default="message")
 SMS_SENDER_FIELD = env("SMS_SENDER_FIELD", default="from")
+
+OTP_HMAC_KEY = env("OTP_HMAC_KEY", default="")
+OTP_MAX_REQUESTS_PER_WINDOW = 5
+OTP_RATE_WINDOW_SECONDS = 3600
