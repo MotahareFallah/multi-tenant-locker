@@ -85,4 +85,12 @@ OTP_LENGTH = 6
 OTP_TTL_SECONDS = 120
 OTP_MAX_ATTEMPTS = 5
 OTP_RESEND_COOLDOWN_SECONDS = 60
-SMS_BACKEND = "accounts.sms.ConsoleSmsBackend"
+
+SMS_BACKEND = env("SMS_BACKEND", default="accounts.sms.ConsoleSmsBackend")
+SMS_API_URL = env("SMS_API_URL", default="")
+SMS_API_KEY = env("SMS_API_KEY", default="")
+SMS_SENDER = env("SMS_SENDER", default="")
+SMS_TIMEOUT = env.float("SMS_TIMEOUT", default=5.0)
+SMS_PHONE_FIELD = env("SMS_PHONE_FIELD", default="to")
+SMS_MESSAGE_FIELD = env("SMS_MESSAGE_FIELD", default="message")
+SMS_SENDER_FIELD = env("SMS_SENDER_FIELD", default="from")
