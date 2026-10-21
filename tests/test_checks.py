@@ -1,3 +1,4 @@
+import pytest
 from django.db import connection
 
 from accounts.checks import (
@@ -126,3 +127,18 @@ def test_sms_backend_check_accepts_the_configured_backend():
 def test_sms_backend_check_rejects_a_class_that_is_not_a_backend(settings):
     settings.SMS_BACKEND = "builtins.dict"
     assert ids(sms_backend_is_importable(None)) == ["accounts.E009"]
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OTP_LENGTH", 5),
+        ("OTP_LENGTH", 11),
+        ("OTP_MAX_ATTEMPTS", 0),
+        ("OTP_TTL_SECONDS", True),
+        ("OTP_RATE_WINDOW_SECONDS", "3600"),
+    ],
+)
+def test_otp_settings_check_rejects_invalid_values(settings, name, value):
+    setattr(settings, name, value)
+    assert ids(otp_settings_are_valid(None)) == ["accounts.E007"]
