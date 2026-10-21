@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -135,18 +136,36 @@ def test_requests_per_phone_are_capped_within_the_window(settings):
     assert OTPChallenge.objects.count() == settings.OTP_MAX_REQUESTS_PER_WINDOW
 
 
-def test_codes_are_bound_to_their_purpose(fixed_codes):
+def test_codes_are_bound_to_their_purpose(fixed_codes, other_purpose):
     otp.request_otp(PHONE, purpose=PURPOSE)
     with pytest.raises(otp.InvalidOTP):
-        otp.verify_otp(PHONE, "111111", purpose="other_purpose")
+        otp.verify_otp(PHONE, "111111", purpose=other_purpose)
     assert otp.verify_otp(PHONE, "111111", purpose=PURPOSE) == E164
 
 
-def test_purposes_do_not_supersede_each_other(fixed_codes):
+def test_purposes_do_not_supersede_each_other(fixed_codes, other_purpose):
     otp.request_otp(PHONE, purpose=PURPOSE)
-    otp.request_otp(PHONE, purpose="other_purpose")
+    otp.request_otp(PHONE, purpose=other_purpose)
     assert OTPChallenge.objects.filter(closed_at__isnull=True).count() == 2
     assert otp.verify_otp(PHONE, "111111", purpose=PURPOSE) == E164
+
+
+def test_unknown_purpose_is_rejected():
+    with pytest.raises(ValueError):
+        otp.request_otp(PHONE, purpose="made_up")
+    with pytest.raises(ValueError):
+        otp.verify_otp(PHONE, "111111", purpose="made_up")
+    assert not OTPChallenge.objects.exists()
+
+
+def test_each_purpose_uses_its_own_policy(fixed_codes, monkeypatch):
+    strict = replace(otp._settings_policy(), max_attempts=1)
+    monkeypatch.setitem(otp.POLICIES, "strict", lambda: strict)
+    otp.request_otp(PHONE, purpose="strict")
+    with pytest.raises(otp.InvalidOTP):
+        otp.verify_otp(PHONE, "999999", purpose="strict")
+    with pytest.raises(otp.InvalidOTP):
+        otp.verify_otp(PHONE, "111111", purpose="strict")
 
 
 def test_hmac_key_is_required(settings):

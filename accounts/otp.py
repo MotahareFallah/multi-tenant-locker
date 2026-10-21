@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import math
 import secrets
+from dataclasses import dataclass
 from datetime import timedelta
 
 from django.conf import settings
@@ -15,7 +16,7 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import connection, transaction
 from django.utils import timezone
 
-from .models import OTPChallenge, OTPCloseReason
+from .models import OTPChallenge, OTPCloseReason, OTPPurpose
 from .phone import normalize_phone_number
 from .sms import get_sms_backend
 
@@ -42,8 +43,40 @@ class OTPRateLimited(OTPThrottled):
     """Too many codes were requested for this number in the current window."""
 
 
-def _generate_code() -> str:
-    length = settings.OTP_LENGTH
+@dataclass(frozen=True)
+class OTPPolicy:
+    length: int
+    ttl: timedelta
+    max_attempts: int
+    cooldown: timedelta
+    max_requests: int
+    window: timedelta
+
+
+def _settings_policy() -> OTPPolicy:
+    return OTPPolicy(
+        length=settings.OTP_LENGTH,
+        ttl=timedelta(seconds=settings.OTP_TTL_SECONDS),
+        max_attempts=settings.OTP_MAX_ATTEMPTS,
+        cooldown=timedelta(seconds=settings.OTP_RESEND_COOLDOWN_SECONDS),
+        max_requests=settings.OTP_MAX_REQUESTS_PER_WINDOW,
+        window=timedelta(seconds=settings.OTP_RATE_WINDOW_SECONDS),
+    )
+
+
+# One entry per allowed purpose. Every flow gets its own limits here, and a
+# purpose without a policy cannot be used.
+POLICIES = {OTPPurpose.CUSTOMER_SIGN_IN: _settings_policy}
+
+
+def _resolve(purpose: str) -> tuple[str, OTPPolicy]:
+    factory = POLICIES.get(purpose)
+    if factory is None:
+        raise ValueError(f"Unknown OTP purpose: {purpose!r}")
+    return str(purpose), factory()
+
+
+def _generate_code(length: int) -> str:
     return f"{secrets.randbelow(10**length):0{length}d}"
 
 
@@ -69,6 +102,7 @@ def _lock_requests(phone_number: str, purpose: str) -> None:
     invisible to a statement that is already waiting, so the cooldown and the
     window count would be stale. A transaction-level advisory lock exists even
     when there are no rows yet, and the queries that follow it see fresh data.
+    This ties the service to PostgreSQL (see accounts.E006).
     """
     with connection.cursor() as cursor:
         cursor.execute(
@@ -77,34 +111,35 @@ def _lock_requests(phone_number: str, purpose: str) -> None:
         )
 
 
-def request_otp(raw_phone_number: str, *, purpose: str) -> None:
+def request_otp(raw_phone_number: str, *, purpose: OTPPurpose) -> None:
     """Create a fresh challenge for the number and send the code by SMS.
 
     Concurrent calls for the same (phone, purpose) run one after another: the
     first creates the challenge, the others are rejected by the cooldown.
     """
+    purpose, policy = _resolve(purpose)
     phone_number = normalize_phone_number(raw_phone_number)
-    code = _generate_code()
+    code = _generate_code(policy.length)
     now = timezone.now()
-    window = timedelta(seconds=settings.OTP_RATE_WINDOW_SECONDS)
-    cooldown = timedelta(seconds=settings.OTP_RESEND_COOLDOWN_SECONDS)
     with transaction.atomic():
         _lock_requests(phone_number, purpose)
         recent = list(
             OTPChallenge.objects.filter(
                 phone_number=phone_number,
                 purpose=purpose,
-                created_at__gte=now - window,
+                created_at__gte=now - policy.window,
             ).order_by("created_at")
         )
-        if len(recent) >= settings.OTP_MAX_REQUESTS_PER_WINDOW:
-            raise OTPRateLimited(_seconds(recent[0].created_at + window - now))
+        if len(recent) >= policy.max_requests:
+            raise OTPRateLimited(_seconds(recent[0].created_at + policy.window - now))
         # A failed delivery sent nothing, so it must not block a retry.
         delivered = [
             c for c in recent if c.closed_reason != OTPCloseReason.DELIVERY_FAILED
         ]
-        if delivered and now - delivered[-1].created_at < cooldown:
-            raise OTPCooldown(_seconds(delivered[-1].created_at + cooldown - now))
+        if delivered and now - delivered[-1].created_at < policy.cooldown:
+            raise OTPCooldown(
+                _seconds(delivered[-1].created_at + policy.cooldown - now)
+            )
         OTPChallenge.objects.filter(
             phone_number=phone_number, purpose=purpose, closed_at__isnull=True
         ).update(closed_at=now, closed_reason=OTPCloseReason.SUPERSEDED)
@@ -112,7 +147,7 @@ def request_otp(raw_phone_number: str, *, purpose: str) -> None:
             phone_number=phone_number,
             purpose=purpose,
             code_hash=_hash_code(purpose, phone_number, code),
-            expires_at=now + timedelta(seconds=settings.OTP_TTL_SECONDS),
+            expires_at=now + policy.ttl,
         )
     try:
         get_sms_backend().send(phone_number, f"Your verification code is {code}")
@@ -124,8 +159,9 @@ def request_otp(raw_phone_number: str, *, purpose: str) -> None:
         raise
 
 
-def verify_otp(raw_phone_number: str, code: str, *, purpose: str) -> str:
+def verify_otp(raw_phone_number: str, code: str, *, purpose: OTPPurpose) -> str:
     """Consume a valid code and return the verified E.164 phone number."""
+    purpose, policy = _resolve(purpose)
     try:
         phone_number = normalize_phone_number(raw_phone_number)
     except ValidationError:
@@ -143,7 +179,7 @@ def verify_otp(raw_phone_number: str, code: str, *, purpose: str) -> str:
         if (
             challenge is None
             or challenge.expires_at <= now
-            or challenge.attempts >= settings.OTP_MAX_ATTEMPTS
+            or challenge.attempts >= policy.max_attempts
         ):
             pass
         elif not hmac.compare_digest(
