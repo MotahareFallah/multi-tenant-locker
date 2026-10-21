@@ -195,3 +195,59 @@ def test_database_requires_a_reason_for_closed_challenges():
         OTPChallenge.objects.create(
             phone_number=E164, code_hash="a", expires_at=now, closed_at=now
         )
+
+
+def test_invalid_policy_settings_are_rejected_before_use(settings):
+    settings.OTP_LENGTH = 4
+    with pytest.raises(ImproperlyConfigured):
+        otp.request_otp(PHONE, purpose=PURPOSE)
+    with pytest.raises(ImproperlyConfigured):
+        otp.verify_otp(PHONE, "1111", purpose=PURPOSE)
+    assert not OTPChallenge.objects.exists()
+
+
+@pytest.mark.parametrize(
+    "bad_code",
+    [111111, None, "\uff11" * 6, " 111111", "11111", "1234567"],
+    ids=["int", "none", "fullwidth-digits", "padded", "too-short", "too-long"],
+)
+def test_malformed_codes_are_rejected_and_counted_as_attempts(fixed_codes, bad_code):
+    otp.request_otp(PHONE, purpose=PURPOSE)
+    with pytest.raises(otp.InvalidOTP):
+        otp.verify_otp(PHONE, bad_code, purpose=PURPOSE)
+    assert OTPChallenge.objects.get().attempts == 1
+    assert otp.verify_otp(PHONE, "111111", purpose=PURPOSE) == E164
+
+
+def test_challenges_outside_the_window_do_not_count(settings):
+    old = timezone.now() - timedelta(seconds=settings.OTP_RATE_WINDOW_SECONDS + 60)
+    for _ in range(settings.OTP_MAX_REQUESTS_PER_WINDOW):
+        challenge = OTPChallenge.objects.create(
+            phone_number=E164,
+            purpose=PURPOSE,
+            code_hash="x",
+            expires_at=old,
+            closed_at=old,
+            closed_reason=OTPCloseReason.SUPERSEDED,
+        )
+        OTPChallenge.objects.filter(pk=challenge.pk).update(created_at=old)
+    otp.request_otp(PHONE, purpose=PURPOSE)
+    assert OTPChallenge.objects.filter(closed_at__isnull=True).count() == 1
+
+
+def test_failure_to_close_the_challenge_does_not_hide_the_delivery_error(
+    fixed_codes, monkeypatch, caplog
+):
+    monkeypatch.setattr(otp, "get_sms_backend", lambda: FailingBackend())
+    real_filter = OTPChallenge.objects.filter
+
+    def filter_(*args, **kwargs):
+        if "pk" in kwargs:
+            raise RuntimeError("database down")
+        return real_filter(*args, **kwargs)
+
+    monkeypatch.setattr(OTPChallenge.objects, "filter", filter_)
+    with pytest.raises(RuntimeError, match="provider down"):
+        otp.request_otp(PHONE, purpose=PURPOSE)
+    assert "Could not close OTP challenge" in caplog.text
+    assert "111111" not in caplog.text

@@ -6,6 +6,7 @@ organization memberships; those belong to the flows that call into this module.
 
 import hashlib
 import hmac
+import logging
 import math
 import secrets
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from django.utils import timezone
 from .models import OTPChallenge, OTPCloseReason, OTPPurpose
 from .phone import normalize_phone_number
 from .sms import get_sms_backend
+
+logger = logging.getLogger(__name__)
 
 
 class OTPError(Exception):
@@ -53,14 +56,37 @@ class OTPPolicy:
     window: timedelta
 
 
+MIN_CODE_LENGTH = 6
+MAX_CODE_LENGTH = 10
+
+
+def _int_setting(name: str, minimum: int, maximum: int | None = None) -> int:
+    value = getattr(settings, name, None)
+    valid = (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= minimum
+        and (maximum is None or value <= maximum)
+    )
+    if not valid:
+        bounds = (
+            f"at least {minimum}"
+            if maximum is None
+            else f"between {minimum} and {maximum}"
+        )
+        raise ImproperlyConfigured(f"{name} must be an integer {bounds}.")
+    return value
+
+
 def _settings_policy() -> OTPPolicy:
+    """Build the default policy, rejecting invalid settings before any use."""
     return OTPPolicy(
-        length=settings.OTP_LENGTH,
-        ttl=timedelta(seconds=settings.OTP_TTL_SECONDS),
-        max_attempts=settings.OTP_MAX_ATTEMPTS,
-        cooldown=timedelta(seconds=settings.OTP_RESEND_COOLDOWN_SECONDS),
-        max_requests=settings.OTP_MAX_REQUESTS_PER_WINDOW,
-        window=timedelta(seconds=settings.OTP_RATE_WINDOW_SECONDS),
+        length=_int_setting("OTP_LENGTH", MIN_CODE_LENGTH, MAX_CODE_LENGTH),
+        ttl=timedelta(seconds=_int_setting("OTP_TTL_SECONDS", 1)),
+        max_attempts=_int_setting("OTP_MAX_ATTEMPTS", 1),
+        cooldown=timedelta(seconds=_int_setting("OTP_RESEND_COOLDOWN_SECONDS", 1)),
+        max_requests=_int_setting("OTP_MAX_REQUESTS_PER_WINDOW", 1),
+        window=timedelta(seconds=_int_setting("OTP_RATE_WINDOW_SECONDS", 1)),
     )
 
 
@@ -93,6 +119,15 @@ def _hash_code(purpose: str, phone_number: str, code: str) -> str:
 
 def _seconds(delta: timedelta) -> int:
     return max(1, math.ceil(delta.total_seconds()))
+
+
+def _is_well_formed(code: object, policy: OTPPolicy) -> bool:
+    return (
+        isinstance(code, str)
+        and code.isascii()
+        and code.isdigit()
+        and len(code) == policy.length
+    )
 
 
 def _lock_requests(phone_number: str, purpose: str) -> None:
@@ -153,9 +188,17 @@ def request_otp(raw_phone_number: str, *, purpose: OTPPurpose) -> None:
         get_sms_backend().send(phone_number, f"Your verification code is {code}")
     except Exception:
         # Keep the record for troubleshooting, but make the code unusable.
-        OTPChallenge.objects.filter(pk=challenge.pk, closed_at__isnull=True).update(
-            closed_at=timezone.now(), closed_reason=OTPCloseReason.DELIVERY_FAILED
-        )
+        try:
+            OTPChallenge.objects.filter(
+                pk=challenge.pk, closed_at__isnull=True
+            ).update(
+                closed_at=timezone.now(),
+                closed_reason=OTPCloseReason.DELIVERY_FAILED,
+            )
+        except Exception:
+            # Never hide the delivery error. The code was not delivered and it
+            # expires on its own. The OTP itself is never logged.
+            logger.exception("Could not close OTP challenge %s", challenge.pk)
         raise
 
 
@@ -166,6 +209,10 @@ def verify_otp(raw_phone_number: str, code: str, *, purpose: OTPPurpose) -> str:
         phone_number = normalize_phone_number(raw_phone_number)
     except ValidationError:
         raise InvalidOTP from None
+    if not _is_well_formed(code, policy):
+        # Malformed input is treated as a wrong guess, so it is counted like one
+        # and can never be used to probe without using up attempts.
+        code = ""
     now = timezone.now()
     valid = False
     # The failure is raised after the atomic block so that the attempt counter
