@@ -17,3 +17,14 @@ def sms_outbox(monkeypatch):
     backend = InMemorySmsBackend()
     monkeypatch.setattr(otp, "get_sms_backend", lambda: backend)
     return backend.outbox
+
+
+@pytest.fixture(autouse=True)
+def otp_hmac_key(settings):
+    settings.OTP_HMAC_KEY = "test-only-otp-key"
+
+
+@pytest.fixture
+def fixed_codes(monkeypatch):
+    codes = iter(["111111", "222222", "333333"])
+    monkeypatch.setattr(otp, "_generate_code", lambda: next(codes))
