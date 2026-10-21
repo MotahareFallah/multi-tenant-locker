@@ -2,28 +2,21 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.checks import Error, Tags, register
+from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.utils.module_loading import import_string
+
+from . import otp
+from .sms import SmsBackend
 
 CONSOLE_BACKEND = "accounts.sms.ConsoleSmsBackend"
 HTTP_BACKEND = "accounts.sms.HttpSmsBackend"
 MIN_HMAC_KEY_LENGTH = 32
 MIN_HMAC_KEY_DISTINCT_CHARS = 8
-POSITIVE_INT_SETTINGS = (
-    "OTP_TTL_SECONDS",
-    "OTP_MAX_ATTEMPTS",
-    "OTP_RESEND_COOLDOWN_SECONDS",
-    "OTP_MAX_REQUESTS_PER_WINDOW",
-    "OTP_RATE_WINDOW_SECONDS",
-)
 
 
 def _setting(name, default=""):
     return getattr(settings, name, default)
-
-
-def _is_int(value):
-    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _is_https_url(url):
@@ -49,19 +42,14 @@ def database_is_postgresql(app_configs, **kwargs):
 
 @register()
 def otp_settings_are_valid(app_configs, **kwargs):
-    errors = []
-    length = _setting("OTP_LENGTH", None)
-    if not _is_int(length) or not 6 <= length <= 10:
-        errors.append(
-            Error("OTP_LENGTH must be an integer between 6 and 10.", id="accounts.E007")
-        )
-    for name in POSITIVE_INT_SETTINGS:
-        value = _setting(name, None)
-        if not _is_int(value) or value <= 0:
-            errors.append(
-                Error(f"{name} must be a positive integer.", id="accounts.E007")
-            )
-    return errors
+    # The service validates the same settings before every use (processes such
+    # as gunicorn never run checks); this reports the problem early as well.
+    try:
+        for factory in otp.POLICIES.values():
+            factory()
+    except ImproperlyConfigured as exc:
+        return [Error(str(exc), id="accounts.E007")]
+    return []
 
 
 @register()
@@ -70,9 +58,21 @@ def sms_backend_is_importable(app_configs, **kwargs):
     if not path:
         return [Error("SMS_BACKEND is not set.", id="accounts.E008")]
     try:
-        import_string(path)
-    except ImportError:
-        return [Error(f"SMS_BACKEND {path!r} cannot be imported.", id="accounts.E008")]
+        backend = import_string(path)
+    except Exception as exc:
+        return [
+            Error(
+                f"SMS_BACKEND {path!r} cannot be imported ({type(exc).__name__}).",
+                id="accounts.E008",
+            )
+        ]
+    if not (isinstance(backend, type) and issubclass(backend, SmsBackend)):
+        return [
+            Error(
+                f"SMS_BACKEND {path!r} must be a subclass of accounts.sms.SmsBackend.",
+                id="accounts.E009",
+            )
+        ]
     return []
 
 
@@ -125,5 +125,7 @@ def sms_http_backend_is_configured(app_configs, **kwargs):
             )
         ]
     if not _is_https_url(url):
-        return [Error("SMS_API_URL must be an https URL with a host.", id="accounts.E004")]
+        return [
+            Error("SMS_API_URL must be an https URL with a host.", id="accounts.E004")
+        ]
     return []
