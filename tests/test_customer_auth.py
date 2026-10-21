@@ -1,7 +1,8 @@
 import pytest
+from django.db import IntegrityError
 
 from accounts import customer_auth, otp
-from accounts.models import User
+from accounts.models import OTPChallenge, OTPCloseReason, User
 
 PHONE = "09123456789"
 E164 = "+989123456789"
@@ -33,8 +34,20 @@ def test_wrong_code_does_not_create_a_customer(fixed_codes):
     assert not User.objects.exists()
 
 
-def test_inactive_customer_cannot_sign_in(fixed_codes):
+def test_inactive_customer_is_rejected_and_the_code_is_consumed(fixed_codes):
     User.objects.create_user(phone_number=PHONE, is_active=False)
     customer_auth.request_customer_code(PHONE)
     with pytest.raises(otp.InvalidOTP):
         customer_auth.sign_in_customer(PHONE, "111111")
+    assert OTPChallenge.objects.get().closed_reason == OTPCloseReason.CONSUMED
+    with pytest.raises(otp.InvalidOTP):
+        customer_auth.sign_in_customer(PHONE, "111111")
+
+
+def test_unexpected_integrity_errors_are_not_swallowed(monkeypatch):
+    def broken_create_user(*args, **kwargs):
+        raise IntegrityError("some other constraint")
+
+    monkeypatch.setattr(User.objects, "create_user", broken_create_user)
+    with pytest.raises(IntegrityError):
+        customer_auth.get_or_create_user(E164)

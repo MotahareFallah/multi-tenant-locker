@@ -1,7 +1,8 @@
-"""Customer sign-in. A verified phone number identifies a customer only.
+"""Customer sign-in. A verified phone number identifies a person only.
 
-It grants no organization permissions. Owner and staff onboarding are separate
-flows with their own OTP purposes and rules.
+`User` is the shared identity for everyone (customers, owners, staff). Signing
+in grants no organization permissions: those come exclusively from memberships.
+Owner and staff onboarding are separate flows with their own OTP purposes.
 """
 
 from django.db import IntegrityError, transaction
@@ -14,17 +15,33 @@ def request_customer_code(raw_phone_number: str) -> None:
     otp.request_otp(raw_phone_number, purpose=OTPPurpose.CUSTOMER_SIGN_IN)
 
 
+def get_or_create_user(phone_number: str) -> User:
+    """Return the user for a verified number, creating it when missing.
+
+    Safe under concurrent creation. A conflict is absorbed only if the user now
+    exists; any other integrity error is re-raised instead of being hidden.
+    """
+    user = User.objects.filter(phone_number=phone_number).first()
+    if user is not None:
+        return user
+    try:
+        with transaction.atomic():
+            return User.objects.create_user(phone_number=phone_number)
+    except IntegrityError:
+        user = User.objects.filter(phone_number=phone_number).first()
+        if user is None:
+            raise
+        return user
+
+
 def sign_in_customer(raw_phone_number: str, code: str) -> User:
     phone_number = otp.verify_otp(
         raw_phone_number, code, purpose=OTPPurpose.CUSTOMER_SIGN_IN
     )
-    user = User.objects.filter(phone_number=phone_number).first()
-    if user is None:
-        try:
-            with transaction.atomic():
-                user = User.objects.create_user(phone_number=phone_number)
-        except IntegrityError:
-            user = User.objects.get(phone_number=phone_number)
+    user = get_or_create_user(phone_number)
+    # Checked after the code is consumed on purpose: the caller gets the same
+    # generic error as for a wrong code, so account state is not revealed, and
+    # the code cannot be replayed.
     if not user.is_active:
         raise otp.InvalidOTP
     return user
