@@ -117,3 +117,12 @@ def test_database_check_requires_postgresql(monkeypatch):
 
 def test_database_check_accepts_postgresql():
     assert database_is_postgresql(None) == []
+
+
+def test_sms_backend_check_accepts_the_configured_backend():
+    assert sms_backend_is_importable(None) == []
+
+
+def test_sms_backend_check_rejects_a_class_that_is_not_a_backend(settings):
+    settings.SMS_BACKEND = "builtins.dict"
+    assert ids(sms_backend_is_importable(None)) == ["accounts.E009"]
