@@ -10,23 +10,32 @@ from django.db import IntegrityError, transaction
 from . import otp
 from .models import OTPPurpose, User
 
-UNIQUE_VIOLATION = "23505"  # PostgreSQL SQLSTATE
+# PostgreSQL SQLSTATE for unique_violation. psycopg 3 exposes it as `.sqlstate`
+# and the violated constraint as `.diag.constraint_name`.
+UNIQUE_VIOLATION = "23505"
+PHONE_UNIQUE_CONSTRAINT = "accounts_user_phone_number_key"
 
 
 def request_customer_code(raw_phone_number: str) -> None:
     otp.request_otp(raw_phone_number, purpose=OTPPurpose.CUSTOMER_SIGN_IN)
 
 
-def _is_unique_violation(exc: IntegrityError) -> bool:
-    return getattr(exc.__cause__, "sqlstate", None) == UNIQUE_VIOLATION
+def _is_duplicate_phone(exc: IntegrityError) -> bool:
+    """True only for a unique violation on the phone number constraint."""
+    cause = exc.__cause__
+    diag = getattr(cause, "diag", None)
+    return (
+        getattr(cause, "sqlstate", None) == UNIQUE_VIOLATION
+        and getattr(diag, "constraint_name", None) == PHONE_UNIQUE_CONSTRAINT
+    )
 
 
 def get_or_create_user(phone_number: str) -> User:
     """Return the user for a verified number, creating it when missing.
 
-    Safe under concurrent creation. Only a unique-constraint conflict is
-    absorbed, and only if the user now exists; any other integrity error is
-    re-raised instead of being hidden.
+    Safe under concurrent creation. Only a duplicate-phone conflict is absorbed,
+    and only if the user now exists; any other integrity error is re-raised
+    instead of being hidden.
     """
     user = User.objects.filter(phone_number=phone_number).first()
     if user is not None:
@@ -35,7 +44,7 @@ def get_or_create_user(phone_number: str) -> User:
         with transaction.atomic():
             return User.objects.create_user(phone_number=phone_number)
     except IntegrityError as exc:
-        if not _is_unique_violation(exc):
+        if not _is_duplicate_phone(exc):
             raise
         user = User.objects.filter(phone_number=phone_number).first()
         if user is None:

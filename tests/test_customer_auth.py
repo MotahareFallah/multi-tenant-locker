@@ -53,18 +53,27 @@ def test_unexpected_integrity_errors_are_not_swallowed(monkeypatch):
         customer_auth.get_or_create_user(E164)
 
 
-def test_a_real_duplicate_phone_is_recognized_as_a_unique_violation():
+def test_a_real_duplicate_phone_is_recognized():
     User.objects.create_user(phone_number=PHONE)
     with pytest.raises(IntegrityError) as exc_info, transaction.atomic():
         User.objects.create_user(phone_number=PHONE)
-    assert customer_auth._is_unique_violation(exc_info.value)
+    diag = exc_info.value.__cause__.diag
+    assert diag.constraint_name == customer_auth.PHONE_UNIQUE_CONSTRAINT
+    assert customer_auth._is_duplicate_phone(exc_info.value)
 
 
-def test_a_check_constraint_violation_is_not_a_unique_violation():
+def test_a_unique_violation_on_another_constraint_is_not_a_duplicate_phone():
+    existing = User.objects.create_user(phone_number=PHONE)
+    with pytest.raises(IntegrityError) as exc_info, transaction.atomic():
+        User.objects.create(pk=existing.pk, phone_number="+989121111111")
+    assert not customer_auth._is_duplicate_phone(exc_info.value)
+
+
+def test_a_check_constraint_violation_is_not_a_duplicate_phone():
     with pytest.raises(IntegrityError) as exc_info, transaction.atomic():
         User.objects.create(phone_number="09123456789")
-    assert not customer_auth._is_unique_violation(exc_info.value)
+    assert not customer_auth._is_duplicate_phone(exc_info.value)
 
 
-def test_an_error_without_a_database_cause_is_not_a_unique_violation():
-    assert not customer_auth._is_unique_violation(IntegrityError("other"))
+def test_an_error_without_a_database_cause_is_not_a_duplicate_phone():
+    assert not customer_auth._is_duplicate_phone(IntegrityError("other"))
