@@ -29,6 +29,7 @@ Deliberately out of scope for v1: notifications, a full transactional outbox, mu
 ## Getting started
 
 Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
+PostgreSQL is required; SQLite is deliberately not supported (see ADR-0001).
 
     cp .env.example .env
     # set DJANGO_SECRET_KEY in .env to a random value
@@ -44,10 +45,19 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] PostgreSQL and Redis via Docker Compose
 - [x] Settings loaded from environment
 - [x] CI (lint, migration check, tests)
-- [ ] Tenancy architecture decision (ADR-0001)
+- [x] OTP service (purpose-scoped codes, per-phone limits, deploy checks)
+- [ ] OTP endpoints with IP throttling (required before any public exposure)
+- [ ] Tenancy architecture decision
 - [ ] Tenant provisioning and context management
 - [ ] Users, memberships and RBAC
 - [ ] Lockers, parcels and state machine
 - [ ] Device simulator, retries and idempotency
 - [ ] Celery expiry task
 - [ ] Security, concurrency and failure test suite
+
+## Authentication
+
+Everyone signs in with a mobile phone number and a one-time code. Verifying a
+number proves ownership only; it grants no organization permissions. See
+[ADR-0001](docs/adr/0001-otp-authentication.md) for the design, the MVP limits
+and the plan for the next PR.
