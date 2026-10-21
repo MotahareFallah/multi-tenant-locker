@@ -77,3 +77,24 @@ itself, create organization permissions.
 - The HTTP SMS backend is generic; it will be adapted once a provider is chosen.
 - `manage.py check --deploy` rejects the console SMS backend, a missing, reused or
   weak HMAC key, and an incomplete or non-HTTPS SMS provider configuration.
+
+## Additional guarantees
+
+- **Settings are validated before use.** `otp._settings_policy` rejects invalid
+  values (`ImproperlyConfigured`) on every call, because processes such as
+  gunicorn never run system checks. `accounts.E007` reports the same problem from
+  management commands.
+- **Malformed codes count as wrong guesses.** A code that is not an ASCII digit
+  string of the expected length is replaced by an empty guess, so it increments the
+  attempt counter like any other failure and cannot be used to probe for free.
+  The HTTP layer will also validate input.
+- **Unique-violation detection is precise.** Concurrent user creation is absorbed
+  only for PostgreSQL SQLSTATE 23505 and only if the user now exists.
+- **Close failures never hide delivery failures.** If marking a challenge as
+  `delivery_failed` itself fails, the original SMS error is still raised and the
+  second failure is logged (without the code). The undelivered code expires on its
+  own.
+- **The SMS backend must subclass `SmsBackend`** (`accounts.E009`); importing a
+  module that raises is reported as `accounts.E008` instead of a traceback.
+- **SQLite is not supported.** This is a deliberate choice: the concurrency
+  guarantees depend on PostgreSQL, and the tests run against it.
