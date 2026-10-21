@@ -10,22 +10,34 @@ itself, create organization permissions.
 
 ## Decisions
 
+- **`User` is the shared identity for everyone.** Signing in identifies a person
+  and grants nothing else. Organization permissions come only from memberships and
+  the active tenant, so a staff member who signs in through the customer flow
+  gains no extra privileges. Owners will create an organization while
+  authenticated and become Admin through a `Membership`; staff will join through
+  an invitation bound to their number.
 - **Verification proves phone ownership only.** `accounts.otp.verify_otp` returns
-  the verified E.164 number and creates nothing. Customer sign-in
-  (`accounts.customer_auth`) turns that proof into a user with no privileges.
-  Owners will create an organization while authenticated and become Admin through
-  a `Membership`; staff will join through an invitation bound to their number.
-- **Codes are scoped by purpose.** The purpose is part of the HMAC input, of the
-  lookup and of the one-open-challenge constraint, so a code issued for one flow
-  cannot be consumed by another.
+  the verified E.164 number and creates nothing. `accounts.customer_auth` turns
+  that proof into a user.
+- **Codes are scoped by purpose, and every purpose has a policy.** The purpose is
+  part of the HMAC input, of the lookup and of the one-open-challenge constraint.
+  `otp.POLICIES` holds the limits per purpose (length, validity, attempts,
+  cooldown, request cap); an unknown purpose raises `ValueError`, so a new flow
+  cannot reuse another flow's rules by accident.
 - **Only an HMAC of the code is stored,** keyed with a dedicated `OTP_HMAC_KEY`
-  (never `SECRET_KEY`) and compared with `hmac.compare_digest`.
+  (never `SECRET_KEY`) and compared with `hmac.compare_digest`. The deploy check
+  requires at least 32 characters with some variety. This is a heuristic and
+  cannot prove entropy; generate the key with `secrets.token_hex(32)`.
 - **Challenges are never deleted.** They are closed with a reason (`consumed`,
   `superseded`, `delivery_failed`), which keeps a troubleshooting trail while a
   closed challenge can never be used. A database constraint requires a reason for
   every closed challenge and allows one open challenge per (phone, purpose).
-- **Failures are indistinguishable.** Wrong, expired, used, locked and unknown all
-  raise the same `InvalidOTP`.
+- **Failures are indistinguishable.** Wrong, expired, used, locked and unknown
+  codes all raise the same `InvalidOTP`. An inactive account is rejected after the
+  code is consumed, with the same error, so account state is not revealed and the
+  code cannot be replayed.
+- **User creation absorbs only a duplicate-number conflict.** If creation fails
+  and the user still does not exist, the original error is re-raised.
 
 ## Limits (defaults)
 
@@ -34,6 +46,8 @@ itself, create organization permissions.
   guessing at 25 tries per hour per number (about 2.5e-5 chance per hour).
 - A failed SMS delivery does not trigger the cooldown but does count toward the
   hourly cap, because the provider may have charged for it.
+- Settings are validated by system checks (`accounts.E007`): the code length must
+  be between 6 and 10 and every limit must be a positive integer.
 
 ## Concurrency
 
@@ -45,8 +59,9 @@ itself, create organization permissions.
 - `verify_otp` locks the open challenge row, so a code is consumed once and the
   attempt counter cannot be exceeded by parallel guesses. The counter is committed
   even when verification fails.
-- These guarantees are tested on real PostgreSQL with parallel connections
-  (`tests/test_otp_concurrency.py`).
+- **PostgreSQL is required.** Advisory locks are PostgreSQL-specific. A system
+  check (`accounts.E006`) rejects other databases, and the tests run on real
+  PostgreSQL with parallel connections, never SQLite.
 
 ## MVP limitations and next PR
 
@@ -60,5 +75,5 @@ itself, create organization permissions.
 - Rotating `OTP_HMAC_KEY` invalidates codes in flight (at most two minutes of
   validity), which is acceptable.
 - The HTTP SMS backend is generic; it will be adapted once a provider is chosen.
-- Deploy checks (`manage.py check --deploy`) reject the console SMS backend, a
-  missing or reused HMAC key and an incomplete or non-HTTPS SMS provider config.
+- `manage.py check --deploy` rejects the console SMS backend, a missing, reused or
+  weak HMAC key, and an incomplete or non-HTTPS SMS provider configuration.
