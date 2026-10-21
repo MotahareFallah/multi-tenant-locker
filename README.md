@@ -29,6 +29,7 @@ Deliberately out of scope for v1: notifications, a full transactional outbox, mu
 ## Getting started
 
 Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
+PostgreSQL is required; SQLite is deliberately not supported (see ADR-0001).
 
     cp .env.example .env
     # set DJANGO_SECRET_KEY in .env to a random value
