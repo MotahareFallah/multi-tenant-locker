@@ -251,3 +251,38 @@ def test_failure_to_close_the_challenge_does_not_hide_the_delivery_error(
         otp.request_otp(PHONE, purpose=PURPOSE)
     assert "Could not close OTP challenge" in caplog.text
     assert "111111" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("OTP_LENGTH", 5),
+        ("OTP_LENGTH", 11),
+        ("OTP_MAX_ATTEMPTS", 0),
+        ("OTP_TTL_SECONDS", True),
+        ("OTP_RATE_WINDOW_SECONDS", "3600"),
+    ],
+)
+def test_invalid_settings_are_rejected_by_the_service(settings, name, value):
+    setattr(settings, name, value)
+    with pytest.raises(ImproperlyConfigured):
+        otp.request_otp(PHONE, purpose=PURPOSE)
+    with pytest.raises(ImproperlyConfigured):
+        otp.verify_otp(PHONE, "111111", purpose=PURPOSE)
+
+
+@pytest.mark.parametrize(
+    "bad_code",
+    ["abcdef", "\u06f1" * 6, "\u0661" * 6, "1111 11"],
+    ids=["letters", "persian-digits", "arabic-indic-digits", "inner-space"],
+)
+def test_other_malformed_codes_get_the_generic_error(fixed_codes, bad_code):
+    otp.request_otp(PHONE, purpose=PURPOSE)
+    with pytest.raises(otp.InvalidOTP):
+        otp.verify_otp(PHONE, bad_code, purpose=PURPOSE)
+    assert OTPChallenge.objects.get().attempts == 1
+
+
+def test_invalid_phone_number_on_verify_gets_the_generic_error():
+    with pytest.raises(otp.InvalidOTP):
+        otp.verify_otp("12345", "111111", purpose=PURPOSE)
