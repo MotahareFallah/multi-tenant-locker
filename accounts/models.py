@@ -29,3 +29,25 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.phone_number
+
+
+class OTPChallenge(models.Model):
+    phone_number = models.CharField(max_length=16)
+    code_hash = models.CharField(max_length=64)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["phone_number", "-created_at"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["phone_number"],
+                condition=models.Q(consumed_at__isnull=True),
+                name="accounts_otp_one_open_per_phone",
+            ),
+        ]
+
+    def __str__(self):
+        return f"OTP for {self.phone_number}"
