@@ -10,16 +10,23 @@ from django.db import IntegrityError, transaction
 from . import otp
 from .models import OTPPurpose, User
 
+UNIQUE_VIOLATION = "23505"  # PostgreSQL SQLSTATE
+
 
 def request_customer_code(raw_phone_number: str) -> None:
     otp.request_otp(raw_phone_number, purpose=OTPPurpose.CUSTOMER_SIGN_IN)
 
 
+def _is_unique_violation(exc: IntegrityError) -> bool:
+    return getattr(exc.__cause__, "sqlstate", None) == UNIQUE_VIOLATION
+
+
 def get_or_create_user(phone_number: str) -> User:
     """Return the user for a verified number, creating it when missing.
 
-    Safe under concurrent creation. A conflict is absorbed only if the user now
-    exists; any other integrity error is re-raised instead of being hidden.
+    Safe under concurrent creation. Only a unique-constraint conflict is
+    absorbed, and only if the user now exists; any other integrity error is
+    re-raised instead of being hidden.
     """
     user = User.objects.filter(phone_number=phone_number).first()
     if user is not None:
@@ -27,7 +34,9 @@ def get_or_create_user(phone_number: str) -> User:
     try:
         with transaction.atomic():
             return User.objects.create_user(phone_number=phone_number)
-    except IntegrityError:
+    except IntegrityError as exc:
+        if not _is_unique_violation(exc):
+            raise
         user = User.objects.filter(phone_number=phone_number).first()
         if user is None:
             raise

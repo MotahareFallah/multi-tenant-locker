@@ -1,5 +1,5 @@
 import pytest
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from accounts import customer_auth, otp
 from accounts.models import OTPChallenge, OTPCloseReason, User
@@ -51,3 +51,20 @@ def test_unexpected_integrity_errors_are_not_swallowed(monkeypatch):
     monkeypatch.setattr(User.objects, "create_user", broken_create_user)
     with pytest.raises(IntegrityError):
         customer_auth.get_or_create_user(E164)
+
+
+def test_a_real_duplicate_phone_is_recognized_as_a_unique_violation():
+    User.objects.create_user(phone_number=PHONE)
+    with pytest.raises(IntegrityError) as exc_info, transaction.atomic():
+        User.objects.create_user(phone_number=PHONE)
+    assert customer_auth._is_unique_violation(exc_info.value)
+
+
+def test_a_check_constraint_violation_is_not_a_unique_violation():
+    with pytest.raises(IntegrityError) as exc_info, transaction.atomic():
+        User.objects.create(phone_number="09123456789")
+    assert not customer_auth._is_unique_violation(exc_info.value)
+
+
+def test_an_error_without_a_database_cause_is_not_a_unique_violation():
+    assert not customer_auth._is_unique_violation(IntegrityError("other"))
