@@ -37,3 +37,7 @@ class OTPRequestThrottle(IPRateThrottle):
 
 class OTPVerifyThrottle(IPRateThrottle):
     scope = "otp_verify"
+
+
+class TokenThrottle(IPRateThrottle):
+    scope = "token"

@@ -24,7 +24,7 @@ def test_the_default_rates_are_valid():
     assert throttle_rates_are_valid(None) == []
 
 
-@pytest.mark.parametrize("scope", ["otp_request", "otp_verify"])
+@pytest.mark.parametrize("scope", ["otp_request", "otp_verify", "token"])
 def test_a_missing_rate_is_an_error(settings, scope):
     rates = dict(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
     del rates[scope]
@@ -36,7 +36,7 @@ def test_a_missing_rate_is_an_error(settings, scope):
 
 def test_missing_throttle_settings_are_reported_not_raised(settings):
     set_rest_framework(settings, DEFAULT_THROTTLE_RATES=None)
-    assert ids(throttle_rates_are_valid(None)) == ["accounts.E010"] * 2
+    assert ids(throttle_rates_are_valid(None)) == ["accounts.E010"] * 3
 
 
 @pytest.mark.parametrize(
