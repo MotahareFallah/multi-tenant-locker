@@ -68,8 +68,9 @@ itself, create organization permissions.
 - The service has no request context, so IP limits live in the HTTP layer (see
   "IP throttling" below). `OTPThrottled` maps to 429 with `Retry-After` and
   `InvalidOTP` to a generic 400.
-- Old challenges are kept indefinitely; a periodic cleanup task will come with the
-  Celery work.
+- Old challenges are kept until `manage.py purge_otp_challenges` removes closed or
+  expired ones older than `--days` (default 30, never shorter than the hourly
+  cap window). Celery will run it daily once it is added.
 - Rotating `OTP_HMAC_KEY` invalidates codes in flight (at most two minutes of
   validity), which is acceptable.
 - The HTTP SMS backend is generic; it will be adapted once a provider is chosen.
@@ -136,8 +137,27 @@ many numbers. Both exist because they stop different abuse.
 
 Known limits:
 
-- `token/refresh/` is not IP throttled yet. It accepts only valid refresh tokens, but
-  it will get its own scope with the JWT configuration work.
 - Every IPv6 address is its own bucket; a client with a whole /64 can use many.
 - Many IPs against many numbers (SMS pumping) is bounded per number but not in total.
   Provider-side spending caps and alerts are needed once a real SMS provider is used.
+
+## Tokens
+
+- **Lifetimes.** Access tokens last 15 minutes and refresh tokens 7 days
+  (`JWT_ACCESS_MINUTES`, `JWT_REFRESH_DAYS`).
+- **Rotation.** Every refresh issues a new refresh token and blacklists the old one,
+  so a stolen refresh token stops working once the real client refreshes. Reusing an
+  old refresh token is rejected.
+- **Logout.** `token/blacklist/` revokes a refresh token. Access tokens are not
+  checked against the blacklist (that would cost a database read per request), so a
+  logged-out access token stays valid for up to 15 minutes. This is the usual
+  trade-off and the reason access tokens are short.
+- **Identity only.** Tokens carry the user id and no organization permissions;
+  those come from Membership at request time.
+- **IP throttling.** `token/refresh/` and `token/blacklist/` share one per-IP budget
+  (`TOKEN_IP_RATE`, default `120/hour`), checked by `accounts.E010` like the OTP
+  rates.
+- **Signing.** Tokens are signed (HS256) with `SECRET_KEY`; rotating it signs
+  everybody out.
+- **Housekeeping.** The blacklist tables grow with every refresh; run
+  `manage.py flushexpiredtokens` periodically.

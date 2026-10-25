@@ -63,7 +63,8 @@ number proves ownership only; it grants no organization permissions. See
 and the throttling decisions.
 
 Endpoints (under `/api/v1/auth/`): `otp/request/`, `otp/verify/` (returns a JWT
-pair) and `token/refresh/`.
+pair), `token/refresh/` (rotates the refresh token) and `token/blacklist/`
+(logout).
 
 The OTP endpoints are rate limited per client IP (`OTP_REQUEST_IP_RATE`,
 `OTP_VERIFY_IP_RATE`). **Set `TRUSTED_PROXY_COUNT` to the number of reverse
@@ -71,3 +72,7 @@ proxies in front of the app** (default `0`: only the socket address is used and
 `X-Forwarded-For` is ignored). With the wrong value, either every user shares one
 limit (too low) or a forged header can dodge it (too high).
 `manage.py check --deploy` warns while it is `0`.
+
+Maintenance: `manage.py purge_otp_challenges` deletes old closed or expired OTP
+challenges, and SimpleJWT's `manage.py flushexpiredtokens` clears expired entries
+from the token blacklist. Both are meant to run daily once Celery is in place.
