@@ -47,7 +47,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] CI (lint, migration check, tests)
 - [x] OTP service (purpose-scoped codes, per-phone limits, deploy checks)
 - [x] OTP endpoints with per-IP throttling (Redis-backed)
-- [ ] Tenancy architecture decision
+- [x] Tenancy architecture decision (ADR-0002)
 - [ ] Tenant provisioning and context management
 - [ ] Users, memberships and RBAC
 - [ ] Lockers, parcels and state machine
