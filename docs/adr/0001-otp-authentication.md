@@ -1,6 +1,6 @@
 # ADR-0001: OTP authentication
 
-Status: accepted (MVP). Endpoints and IP throttling are planned for the next PR.
+Status: accepted (MVP). Endpoints and per-IP throttling are implemented.
 
 ## Context
 
@@ -63,20 +63,20 @@ itself, create organization permissions.
   check (`accounts.E006`) rejects other databases, and the tests run on real
   PostgreSQL with parallel connections, never SQLite.
 
-## MVP limitations and next PR
+## MVP limitations
 
-- No IP-based limits yet, because the service has no request context. The next PR
-  adds the HTTP endpoints with DRF throttling backed by Redis, mapping
-  `OTPThrottled` to 429 with `Retry-After` and `InvalidOTP` to a generic 400.
-  **The endpoints must not be exposed publicly before IP throttling is in place.**
-  Client IP resolution behind a proxy must be configured explicitly.
+- The service has no request context, so IP limits live in the HTTP layer (see
+  "IP throttling" below). `OTPThrottled` maps to 429 with `Retry-After` and
+  `InvalidOTP` to a generic 400.
 - Old challenges are kept indefinitely; a periodic cleanup task will come with the
   Celery work.
 - Rotating `OTP_HMAC_KEY` invalidates codes in flight (at most two minutes of
   validity), which is acceptable.
 - The HTTP SMS backend is generic; it will be adapted once a provider is chosen.
 - `manage.py check --deploy` rejects the console SMS backend, a missing, reused or
-  weak HMAC key, and an incomplete or non-HTTPS SMS provider configuration.
+  weak HMAC key, and an incomplete or non-HTTPS SMS provider configuration. It
+  also reports invalid IP throttle rates (`accounts.E010`), an invalid proxy
+  count (`accounts.E011`) and, as a warning, a proxy count of 0 (`accounts.W001`).
 
 ## Additional guarantees
 
@@ -87,7 +87,7 @@ itself, create organization permissions.
 - **Malformed codes count as wrong guesses.** A code that is not an ASCII digit
   string of the expected length is replaced by an empty guess, so it increments the
   attempt counter like any other failure and cannot be used to probe for free.
-  The HTTP layer will also validate input.
+  The HTTP serializers also validate input.
 - **Unique-violation detection is precise.** Concurrent user creation is absorbed
   only for PostgreSQL SQLSTATE 23505 and only if the user now exists.
 - **Close failures never hide delivery failures.** If marking a challenge as
@@ -101,10 +101,43 @@ itself, create organization permissions.
 
 ## Notes for the HTTP layer
 
-- The service accepts ASCII digits only. The API layer will normalize Persian and
+- The service accepts ASCII digits only. The API layer normalizes Persian and
   Arabic-Indic digits to ASCII (users may type them) and validate the input shape
   before calling the service. The service still treats anything malformed as a
   counted wrong guess.
 - Duplicate-phone detection relies on psycopg 3 (`.sqlstate`, `.diag`) and on the
   PostgreSQL constraint name `accounts_user_phone_number_key`; a database test
   pins that name.
+
+## IP throttling
+
+Per-phone limits protect one number; per-IP limits slow down one client that tries
+many numbers. Both exist because they stop different abuse.
+
+- **Scope.** `otp/request/` and `otp/verify/` each have their own budget per client
+  IP (defaults `30/hour` and `60/hour`, from `OTP_REQUEST_IP_RATE` and
+  `OTP_VERIFY_IP_RATE`). The rates are moderate on purpose: mobile carriers put many
+  users behind one shared address (CGNAT), and a strict limit would lock them out.
+- **Client IP.** DRF's `get_ident` is used with `NUM_PROXIES` set explicitly from
+  `TRUSTED_PROXY_COUNT`. With `0`, `X-Forwarded-For` is ignored. With `None` (DRF's
+  default) DRF would trust the whole header, and a forged value per request would
+  create a fresh bucket each time, so `accounts.E011` rejects it. With `N > 0` the
+  client is the address the Nth proxy from the end appended; anything the client
+  put in front of it is ignored.
+- **Invalid requests count.** Throttling runs before input validation, so malformed
+  requests spend budget like any other.
+- **Redis.** Counters live in the Django cache (Redis). Tests use an isolated
+  in-memory cache, plus one test against real Redis.
+- **Fail-open.** If the cache fails, the request is allowed and the error is logged.
+  The per-phone limits (cooldown, hourly cap, attempt counter) are in PostgreSQL and
+  still apply, and a cache outage should not take sign-in down for everyone. The
+  trade-off is that IP limits are absent while Redis is down; monitoring of the
+  logged error is expected.
+
+Known limits:
+
+- `token/refresh/` is not IP throttled yet. It accepts only valid refresh tokens, but
+  it will get its own scope with the JWT configuration work.
+- Every IPv6 address is its own bucket; a client with a whole /64 can use many.
+- Many IPs against many numbers (SMS pumping) is bounded per number but not in total.
+  Provider-side spending caps and alerts are needed once a real SMS provider is used.
