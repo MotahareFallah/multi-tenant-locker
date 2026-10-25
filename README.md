@@ -46,7 +46,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] Settings loaded from environment
 - [x] CI (lint, migration check, tests)
 - [x] OTP service (purpose-scoped codes, per-phone limits, deploy checks)
-- [ ] OTP endpoints with IP throttling (required before any public exposure)
+- [x] OTP endpoints with per-IP throttling (Redis-backed)
 - [ ] Tenancy architecture decision
 - [ ] Tenant provisioning and context management
 - [ ] Users, memberships and RBAC
@@ -60,4 +60,14 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 Everyone signs in with a mobile phone number and a one-time code. Verifying a
 number proves ownership only; it grants no organization permissions. See
 [ADR-0001](docs/adr/0001-otp-authentication.md) for the design, the MVP limits
-and the plan for the next PR.
+and the throttling decisions.
+
+Endpoints (under `/api/v1/auth/`): `otp/request/`, `otp/verify/` (returns a JWT
+pair) and `token/refresh/`.
+
+The OTP endpoints are rate limited per client IP (`OTP_REQUEST_IP_RATE`,
+`OTP_VERIFY_IP_RATE`). **Set `TRUSTED_PROXY_COUNT` to the number of reverse
+proxies in front of the app** (default `0`: only the socket address is used and
+`X-Forwarded-For` is ignored). With the wrong value, either every user shares one
+limit (too low) or a forged header can dodge it (too high).
+`manage.py check --deploy` warns while it is `0`.
