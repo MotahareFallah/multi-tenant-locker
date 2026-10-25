@@ -1,10 +1,11 @@
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.core.checks import Error, Tags, register
+from django.core.checks import Error, Tags, Warning, register
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.utils.module_loading import import_string
+from rest_framework.throttling import SimpleRateThrottle
 
 from . import otp
 from .sms import SmsBackend
@@ -127,5 +128,84 @@ def sms_http_backend_is_configured(app_configs, **kwargs):
     if not _is_https_url(url):
         return [
             Error("SMS_API_URL must be an https URL with a host.", id="accounts.E004")
+        ]
+    return []
+
+
+THROTTLE_SCOPES = ("otp_request", "otp_verify")
+
+
+def _rest_framework_settings():
+    return getattr(settings, "REST_FRAMEWORK", {}) or {}
+
+
+def _is_valid_rate(rate):
+    if not isinstance(rate, str):
+        return False
+    try:
+        num_requests, duration = SimpleRateThrottle.parse_rate(None, rate)
+    except (ValueError, KeyError, IndexError, AttributeError):
+        return False
+    return num_requests > 0 and duration > 0
+
+
+def _proxy_count():
+    return _rest_framework_settings().get("NUM_PROXIES")
+
+
+def _is_valid_proxy_count(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+@register()
+def throttle_rates_are_valid(app_configs, **kwargs):
+    rates = _rest_framework_settings().get("DEFAULT_THROTTLE_RATES") or {}
+    errors = []
+    for scope in THROTTLE_SCOPES:
+        if not _is_valid_rate(rates.get(scope)):
+            errors.append(
+                Error(
+                    f"The IP throttle rate for '{scope}' is missing or invalid.",
+                    hint=(
+                        "Set REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']"
+                        f"['{scope}'] to a positive rate such as '30/hour'."
+                    ),
+                    id="accounts.E010",
+                )
+            )
+    return errors
+
+
+@register()
+def proxy_count_is_valid(app_configs, **kwargs):
+    if _is_valid_proxy_count(_proxy_count()):
+        return []
+    return [
+        Error(
+            "REST_FRAMEWORK['NUM_PROXIES'] must be an integer >= 0.",
+            hint=(
+                "None makes DRF trust the whole X-Forwarded-For header, so a "
+                "forged header could dodge IP throttling. Set TRUSTED_PROXY_COUNT."
+            ),
+            id="accounts.E011",
+        )
+    ]
+
+
+@register(Tags.security, deploy=True)
+def proxy_count_matches_deployment(app_configs, **kwargs):
+    value = _proxy_count()
+    if _is_valid_proxy_count(value) and value == 0:
+        return [
+            Warning(
+                "NUM_PROXIES is 0: the client IP is the socket address and "
+                "X-Forwarded-For is ignored.",
+                hint=(
+                    "Behind a reverse proxy or load balancer every user would "
+                    "share one IP and one throttle bucket. Set TRUSTED_PROXY_COUNT "
+                    "to the number of trusted proxies, or ignore this if there is none."
+                ),
+                id="accounts.W001",
+            )
         ]
     return []

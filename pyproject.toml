@@ -38,4 +38,5 @@ python_files = ["tests.py", "test_*.py", "*_tests.py"]
 addopts = "-ra --strict-markers"
 markers = [
     "concurrency: tests that use real parallel database connections",
+    "redis: tests that talk to a real Redis server",
 ]
