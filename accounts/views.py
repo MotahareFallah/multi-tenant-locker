@@ -4,11 +4,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenBlacklistView, TokenRefreshView
 
 from . import customer_auth, otp
 from .serializers import OTPRequestSerializer, OTPVerifySerializer
 from .sms import SmsDeliveryError
-from .throttling import OTPRequestThrottle, OTPVerifyThrottle
+from .throttling import OTPRequestThrottle, OTPVerifyThrottle, TokenThrottle
 
 
 class InvalidCode(APIException):
@@ -63,3 +64,13 @@ class OTPVerifyView(PublicAPIView):
             raise InvalidCode from None
         refresh = RefreshToken.for_user(user)
         return Response({"refresh": str(refresh), "access": str(refresh.access_token)})
+
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+    throttle_classes = [TokenThrottle]
+
+
+class ThrottledTokenBlacklistView(TokenBlacklistView):
+    """Logout: revokes a refresh token. Access tokens expire on their own."""
+
+    throttle_classes = [TokenThrottle]
