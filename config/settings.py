@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -20,6 +21,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "accounts",
 ]
 
@@ -114,4 +116,13 @@ REST_FRAMEWORK["NUM_PROXIES"] = env.int("TRUSTED_PROXY_COUNT", default=0)
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "otp_request": env("OTP_REQUEST_IP_RATE", default="30/hour"),
     "otp_verify": env("OTP_VERIFY_IP_RATE", default="60/hour"),
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_MINUTES", default=15)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DAYS", default=7)),
+    # Every refresh issues a new refresh token and blacklists the old one, so a
+    # stolen refresh token stops working as soon as the real client refreshes.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
