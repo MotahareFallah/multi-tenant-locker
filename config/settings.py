@@ -98,3 +98,20 @@ SMS_SENDER_FIELD = env("SMS_SENDER_FIELD", default="from")
 OTP_HMAC_KEY = env("OTP_HMAC_KEY", default="")
 OTP_MAX_REQUESTS_PER_WINDOW = 5
 OTP_RATE_WINDOW_SECONDS = 3600
+
+REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+}
+
+# Number of reverse proxies in front of the app. 0 means X-Forwarded-For is
+# ignored and the client IP is REMOTE_ADDR. Never leave this unset: DRF would then
+# trust the whole forwarded header, and a forged one could dodge IP throttling.
+REST_FRAMEWORK["NUM_PROXIES"] = env.int("TRUSTED_PROXY_COUNT", default=0)
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+    "otp_request": env("OTP_REQUEST_IP_RATE", default="30/hour"),
+    "otp_verify": env("OTP_VERIFY_IP_RATE", default="60/hour"),
+}

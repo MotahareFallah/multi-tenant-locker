@@ -2,6 +2,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from django.core.cache import cache
 from django.db import connections
 
 from accounts import otp
@@ -63,3 +64,15 @@ def run_concurrently():
             return [future.result() for future in futures]
 
     return run
+
+
+@pytest.fixture(autouse=True)
+def local_memory_cache(settings):
+    """Keep throttle counters out of Redis and isolated between tests."""
+    settings.CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "tests",
+        }
+    }
+    cache.clear()
