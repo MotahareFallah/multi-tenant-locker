@@ -116,6 +116,7 @@ REST_FRAMEWORK["NUM_PROXIES"] = env.int("TRUSTED_PROXY_COUNT", default=0)
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "otp_request": env("OTP_REQUEST_IP_RATE", default="30/hour"),
     "otp_verify": env("OTP_VERIFY_IP_RATE", default="60/hour"),
+    "token": env("TOKEN_IP_RATE", default="120/hour"),
 }
 
 SIMPLE_JWT = {
