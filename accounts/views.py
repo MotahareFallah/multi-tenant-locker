@@ -8,6 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from . import customer_auth, otp
 from .serializers import OTPRequestSerializer, OTPVerifySerializer
 from .sms import SmsDeliveryError
+from .throttling import OTPRequestThrottle, OTPVerifyThrottle
 
 
 class InvalidCode(APIException):
@@ -32,11 +33,14 @@ class PublicAPIView(APIView):
 
 
 class OTPRequestView(PublicAPIView):
+    throttle_classes = [OTPRequestThrottle]
+
     def post(self, request):
         serializer = OTPRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        phone_number = serializer.validated_data["phone_number"]
         try:
-            customer_auth.request_customer_code(serializer.validated_data["phone_number"])
+            customer_auth.request_customer_code(phone_number)
         except otp.OTPThrottled as exc:
             raise Throttled(wait=exc.retry_after) from None
         except SmsDeliveryError:
@@ -47,6 +51,8 @@ class OTPRequestView(PublicAPIView):
 
 
 class OTPVerifyView(PublicAPIView):
+    throttle_classes = [OTPVerifyThrottle]
+
     def post(self, request):
         serializer = OTPVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
