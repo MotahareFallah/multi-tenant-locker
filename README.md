@@ -48,8 +48,10 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] OTP service (purpose-scoped codes, per-phone limits, deploy checks)
 - [x] OTP endpoints with per-IP throttling (Redis-backed)
 - [x] Tenancy architecture decision (ADR-0002)
-- [ ] Tenant provisioning and context management
-- [ ] Users, memberships and RBAC
+- [x] Tenant provisioning (an Organization and its own schema)
+- [ ] Tenant context (membership-gated schema activation)
+- [x] Users and memberships
+- [ ] Role-based permissions (Admin and Operator)
 - [ ] Lockers, parcels and state machine
 - [ ] Device simulator, retries and idempotency
 - [ ] Celery expiry task
@@ -76,3 +78,12 @@ limit (too low) or a forged header can dodge it (too high).
 Maintenance: `manage.py purge_otp_challenges` deletes old closed or expired OTP
 challenges, and SimpleJWT's `manage.py flushexpiredtokens` clears expired entries
 from the token blacklist. Both are meant to run daily once Celery is in place.
+
+## Organizations
+
+Each organization has its own PostgreSQL schema ([ADR-0002](docs/adr/0002-tenancy.md)).
+Users, memberships and tokens live in the `public` schema; lockers and parcels will
+live in the organization's schema. Apply migrations with
+`uv run python manage.py migrate_schemas` (shared apps in `public`, then every
+organization's schema). Organizations are created with
+`organizations.services.create_organization`; there is no public endpoint for it yet.
