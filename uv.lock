@@ -272,6 +272,18 @@ wheels = [
 ]
 
 [[package]]
+name = "django-tenants"
+version = "4.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/96/d5/7f1b0bb15d0a5858f4a758be63ec4f6f7a2901b84ba580b2f67f8337228e/django_tenants-4.0.1.tar.gz", hash = "sha256:769a0934507305c55b7b6e49b788df6627dcc546d7f4e187812285bad1c6270b", size = 180774, upload-time = "2026-10-23T22:17:21.524Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/69/9b0935d7555abf67b9984a9bdf3dd132edba407638daf6f2a0cb4d737991/django_tenants-4.0.1-py3-none-any.whl", hash = "sha256:b9bd2ce240e71e58e47981288807d5e449c6a3624685dfe20afa819341f7ad5c", size = 137013, upload-time = "2026-10-23T22:17:19.984Z" },
+]
+
+[[package]]
 name = "djangorestframework"
 version = "3.17.2"
 source = { registry = "https://pypi.org/simple" }
@@ -338,6 +350,7 @@ dependencies = [
     { name = "celery" },
     { name = "django" },
     { name = "django-environ" },
+    { name = "django-tenants" },
     { name = "djangorestframework" },
     { name = "djangorestframework-simplejwt" },
     { name = "phonenumbers" },
@@ -358,6 +371,7 @@ requires-dist = [
     { name = "celery", specifier = ">=5.6.3" },
     { name = "django", specifier = ">=5.2,<5.3" },
     { name = "django-environ", specifier = ">=0.14.0" },
+    { name = "django-tenants", specifier = ">=4.0.1" },
     { name = "djangorestframework", specifier = ">=3.17.2" },
     { name = "djangorestframework-simplejwt", specifier = ">=5.5.1" },
     { name = "phonenumbers", specifier = ">=9.0.41" },
