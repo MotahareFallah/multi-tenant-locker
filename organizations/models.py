@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
 from django_tenants.models import TenantMixin
@@ -21,3 +22,43 @@ class Organization(TenantMixin):
 
     def __str__(self):
         return self.name
+
+
+class Role(models.TextChoices):
+    ADMIN = "admin", "Admin"
+    OPERATOR = "operator", "Operator"
+
+
+class Membership(models.Model):
+    """What a user may do in one organization. Lives in the public schema.
+
+    Verifying a phone number proves ownership only; every organization permission
+    comes from a row here.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,  # deactivate users instead of deleting them
+        related_name="memberships",
+    )
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="memberships"
+    )
+    role = models.CharField(max_length=16, choices=Role.choices)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "organization"],
+                name="organizations_one_membership_per_user_org",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(role__in=Role.values),
+                name="organizations_membership_role_valid",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} @ {self.organization_id} ({self.role})"

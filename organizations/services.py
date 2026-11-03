@@ -1,6 +1,6 @@
 import secrets
 
-from .models import Organization
+from .models import Membership, Organization
 
 
 def _new_schema_name():
@@ -18,3 +18,27 @@ def create_organization(*, name, slug):
     organization.full_clean()
     organization.save()
     return organization
+
+
+def add_member(*, organization, user, role):
+    """Give a user a role in an organization (invalid role or duplicate is rejected)."""
+    membership = Membership(organization=organization, user=user, role=role)
+    membership.full_clean()
+    membership.save()
+    return membership
+
+
+def get_active_membership(user, slug):
+    """The user's active membership in the organization with this slug, or None.
+
+    An unknown slug, somebody else's organization and an inactive membership all
+    give None. Callers must treat them alike (404) so that an outsider cannot tell
+    which organizations exist.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return None
+    return (
+        Membership.objects.select_related("organization")
+        .filter(user=user, organization__slug=slug, is_active=True)
+        .first()
+    )
