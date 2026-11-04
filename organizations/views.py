@@ -1,13 +1,28 @@
-from django.db import connection
-from rest_framework.exceptions import NotFound
-from rest_framework.generics import ListAPIView
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import connection, transaction
+from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.exceptions import APIException, NotFound
+from rest_framework.exceptions import ValidationError as APIValidationError
+from rest_framework.generics import ListCreateAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Membership
 from .permissions import IsOrgAdmin
-from .serializers import MemberSerializer
-from .services import get_active_membership
+from .serializers import (
+    MemberCreateSerializer,
+    MemberSerializer,
+    MemberUpdateSerializer,
+)
+from .services import (
+    LastAdminError,
+    add_member_by_phone,
+    change_role,
+    deactivate_member,
+    get_active_membership,
+    reactivate_member,
+)
 
 
 class TenantViewMixin:
@@ -71,8 +86,14 @@ class OrganizationView(TenantAPIView):
         )
 
 
-class MemberListView(TenantViewMixin, ListAPIView):
-    """The organization's memberships, for its admins.
+class LastAdmin(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "An organization must keep at least one active admin."
+    default_code = "last_admin"
+
+
+class MemberListCreateView(TenantViewMixin, ListCreateAPIView):
+    """List the organization's memberships and add a member, for its admins.
 
     Memberships live in `public`, so the schema does not separate organizations
     here: the filter on the caller's own organization does.
@@ -87,3 +108,50 @@ class MemberListView(TenantViewMixin, ListAPIView):
             .select_related("user")
             .order_by("id")
         )
+
+    def create(self, request, *args, **kwargs):
+        serializer = MemberCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            membership = add_member_by_phone(
+                organization=request.membership.organization,
+                phone_number=serializer.validated_data["phone_number"],
+                role=serializer.validated_data["role"],
+            )
+        except DjangoValidationError as exc:
+            raise APIValidationError(exc.messages) from exc
+        return Response(
+            MemberSerializer(membership).data, status=status.HTTP_201_CREATED
+        )
+
+
+class MemberDetailView(TenantViewMixin, APIView):
+    """Change a member's role or active flag. There is no delete: deactivate."""
+
+    permission_classes = [IsOrgAdmin]
+
+    def patch(self, request, slug, pk):
+        # Filtering on the caller's organization makes another organization's
+        # member look exactly like a member that does not exist.
+        membership = get_object_or_404(
+            Membership.objects.filter(
+                organization=request.membership.organization
+            ).select_related("user"),
+            pk=pk,
+        )
+        serializer = MemberUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            with transaction.atomic():
+                if "role" in data:
+                    membership = change_role(membership, data["role"])
+                if "is_active" in data:
+                    change = reactivate_member if data["is_active"] else deactivate_member
+                    membership = change(membership)
+        except LastAdminError:
+            raise LastAdmin from None
+        except DjangoValidationError as exc:
+            raise APIValidationError(exc.messages) from exc
+        membership = Membership.objects.select_related("user").get(pk=membership.pk)
+        return Response(MemberSerializer(membership).data)
