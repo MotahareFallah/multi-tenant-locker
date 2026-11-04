@@ -1,6 +1,9 @@
 import secrets
 
-from .models import Membership, Organization
+from django.core.exceptions import ValidationError
+from django.db import transaction
+
+from .models import Membership, Organization, Role
 
 
 def _new_schema_name():
@@ -42,3 +45,60 @@ def get_active_membership(user, slug):
         .filter(user=user, organization__slug=slug, is_active=True)
         .first()
     )
+
+
+class LastAdminError(Exception):
+    """The change would leave the organization without an active admin."""
+
+
+def _locked_membership(membership):
+    """Serialize membership changes per organization; return a fresh copy.
+
+    The organization row is locked, not the membership: two admins removing each
+    other touch two different membership rows, but both need this one lock, so the
+    second change sees the result of the first. Reloading under the lock means a
+    stale object in the caller's hands is harmless.
+    """
+    Organization.objects.select_for_update().get(pk=membership.organization_id)
+    return Membership.objects.get(pk=membership.pk)
+
+
+def _is_last_active_admin(membership):
+    if membership.role != Role.ADMIN or not membership.is_active:
+        return False
+    others = Membership.objects.filter(
+        organization_id=membership.organization_id,
+        role=Role.ADMIN,
+        is_active=True,
+    ).exclude(pk=membership.pk)
+    return not others.exists()
+
+
+@transaction.atomic
+def change_role(membership, role):
+    if role not in Role.values:
+        raise ValidationError("Unknown role.")
+    membership = _locked_membership(membership)
+    if role != Role.ADMIN and _is_last_active_admin(membership):
+        raise LastAdminError
+    membership.role = role
+    membership.save(update_fields=["role"])
+    return membership
+
+
+@transaction.atomic
+def deactivate_member(membership):
+    membership = _locked_membership(membership)
+    if _is_last_active_admin(membership):
+        raise LastAdminError
+    membership.is_active = False
+    membership.save(update_fields=["is_active"])
+    return membership
+
+
+@transaction.atomic
+def reactivate_member(membership):
+    membership = _locked_membership(membership)
+    membership.is_active = True
+    membership.save(update_fields=["is_active"])
+    return membership
