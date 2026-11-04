@@ -49,7 +49,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] OTP endpoints with per-IP throttling (Redis-backed)
 - [x] Tenancy architecture decision (ADR-0002)
 - [x] Tenant provisioning (an Organization and its own schema)
-- [ ] Tenant context (membership-gated schema activation)
+- [x] Tenant context (membership-gated schema activation)
 - [x] Users and memberships
 - [ ] Role-based permissions (Admin and Operator)
 - [ ] Lockers, parcels and state machine
@@ -87,3 +87,7 @@ live in the organization's schema. Apply migrations with
 `uv run python manage.py migrate_schemas` (shared apps in `public`, then every
 organization's schema). Organizations are created with
 `organizations.services.create_organization`; there is no public endpoint for it yet.
+
+Tenant endpoints live under `/api/v1/orgs/<slug>/` and are served only to active
+members; `GET /api/v1/orgs/<slug>/` returns the organization and the caller's role.
+Anyone else gets the same 404 whether the organization exists or not.
