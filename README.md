@@ -51,7 +51,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] Tenant provisioning (an Organization and its own schema)
 - [x] Tenant context (membership-gated schema activation)
 - [x] Users and memberships
-- [ ] Role-based permissions (Admin and Operator)
+- [x] Role-based permissions (Admin and Operator)
 - [ ] Lockers, parcels and state machine
 - [ ] Device simulator, retries and idempotency
 - [ ] Celery expiry task
@@ -90,4 +90,6 @@ organization's schema). Organizations are created with
 
 Tenant endpoints live under `/api/v1/orgs/<slug>/` and are served only to active
 members; `GET /api/v1/orgs/<slug>/` returns the organization and the caller's role.
-Anyone else gets the same 404 whether the organization exists or not.
+Anyone else gets the same 404 whether the organization exists or not. A member
+without the required role gets a 403. `GET /api/v1/orgs/<slug>/members/` lists the
+memberships and is for admins only.
