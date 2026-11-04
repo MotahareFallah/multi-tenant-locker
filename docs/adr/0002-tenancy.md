@@ -98,5 +98,32 @@ operate, and cross-tenant admin queries get harder).
   operator's job). There is no public endpoint for it yet, and opening one is a
   product decision that needs its own limits.
 
-Still open: CI should also run `migrate_schemas` before lockers are added, because
-tenant isolation is defined by the per-schema migrations.
+CI runs `migrate_schemas` on a fresh database, because tenant isolation is defined
+by the per-schema migrations.
+
+## Tenant selection (implemented)
+
+Endpoints under `/api/v1/orgs/<slug>/` inherit `TenantAPIView`. For each request:
+
+1. Authentication, permissions and throttles run while the schema is `public`.
+2. The caller's active membership for the slug is loaded. An unknown slug,
+   somebody else's organization and an inactive membership give the same 404.
+3. Only then is the organization's schema activated and the handler run.
+4. The response is **rendered before the schema is reset.** DRF renders after
+   `dispatch` returns, so a lazy queryset left in the response data would be
+   evaluated against `public` and return the wrong rows without any error. A test
+   pins this.
+5. The connection goes back to `public` in a `finally`, including after unhandled
+   errors.
+
+The tests (`tests/test_tenant_view.py`, `tests/test_tenant_isolation.py`) cover each
+point above, plus forged `Host`, `X-Forwarded-*` and custom headers, and twelve
+concurrent threads alternating between two organizations. Until lockers exist they
+use rows of `django_content_type`, which is present in `public` and in every
+schema, as stand-in tenant data; the same tests must be repeated with real locker
+and parcel data when those models arrive.
+
+Work outside a request (Celery tasks, management commands) has no ambient tenant.
+It must receive the organization id and activate the schema explicitly with
+`tenant_context`, and must never rely on whatever the connection happens to hold.
+The view layer assumes synchronous workers.

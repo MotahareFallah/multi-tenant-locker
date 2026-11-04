@@ -43,5 +43,7 @@ jobs:
         run: uv run python manage.py makemigrations --check --dry-run
       - name: Django system check
         run: uv run python manage.py check --database default
+      - name: Apply migrations (public and tenant schemas)
+        run: uv run python manage.py migrate_schemas
       - name: Tests
         run: uv run pytest
