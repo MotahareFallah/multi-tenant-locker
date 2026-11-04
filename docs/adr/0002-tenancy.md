@@ -127,3 +127,35 @@ Work outside a request (Celery tasks, management commands) has no ambient tenant
 It must receive the organization id and activate the schema explicitly with
 `tenant_context`, and must never rely on whatever the connection happens to hold.
 The view layer assumes synchronous workers.
+
+## Roles and permissions (implemented)
+
+- Two roles: **Admin** and **Operator**. Admins can do everything operators can.
+  Admins manage the organization's members; operators do the day-to-day work with
+  lockers and parcels (those endpoints come later).
+- `IsOrgMember` (any active member) and `IsOrgAdmin` are ordinary DRF permission
+  classes. They read `request.membership`, which `TenantViewMixin` sets, and **fail
+  closed**: a view that forgot the mixin denies everybody instead of letting
+  everybody in. Views choose their level with `permission_classes`.
+- Answers: 401 when not signed in, 404 for an unknown slug, somebody else's
+  organization or an inactive membership (all identical), and 403 for a member
+  whose role is too low. A 403 only ever goes to somebody who already belongs to the
+  organization, so it reveals nothing.
+- **The role is read from the database on every request**, never from the token or
+  a cache. Demoting or deactivating a member therefore applies to their very next
+  request even though their token is still valid. The cost is one small query per
+  request, which is worth the immediate effect.
+- Permission checks run on the `public` schema, before the organization's schema is
+  activated, so a denied request never reaches tenant data.
+- `Membership` lives in `public`, so schema isolation does not protect it. Views
+  that read memberships filter on the caller's own organization explicitly, and a
+  test pins that other organizations' members never appear.
+- Permissions that depend on the object (for example "an operator may only touch
+  parcels at their own locker") are not part of this step and need their own design
+  once lockers exist.
+
+Not done yet, deliberately kept for the next step: adding a member, changing a role
+and deactivating a member. They need the rule that an organization can never lose its
+last admin, and a decision on how to attach a membership to a phone number that has
+not signed in yet. The member list is not paginated because organizations have few
+members; revisit if that stops being true.
