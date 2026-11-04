@@ -1,8 +1,12 @@
 from django.db import connection
 from rest_framework.exceptions import NotFound
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .models import Membership
+from .permissions import IsOrgAdmin
+from .serializers import MemberSerializer
 from .services import get_active_membership
 
 
@@ -64,4 +68,22 @@ class OrganizationView(TenantAPIView):
                 "name": membership.organization.name,
                 "role": membership.role,
             }
+        )
+
+
+class MemberListView(TenantViewMixin, ListAPIView):
+    """The organization's memberships, for its admins.
+
+    Memberships live in `public`, so the schema does not separate organizations
+    here: the filter on the caller's own organization does.
+    """
+
+    permission_classes = [IsOrgAdmin]
+    serializer_class = MemberSerializer
+
+    def get_queryset(self):
+        return (
+            Membership.objects.filter(organization=self.request.membership.organization)
+            .select_related("user")
+            .order_by("id")
         )
