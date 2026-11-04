@@ -1,29 +1,46 @@
 from django.db import connection
 from rest_framework.exceptions import NotFound
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .models import Membership
+from .permissions import IsOrgAdmin
+from .serializers import MemberSerializer
 from .services import get_active_membership
 
 
-class TenantAPIView(APIView):
-    """Base class for endpoints under /api/v1/orgs/<slug>/.
+class TenantViewMixin:
+    """Tenant handling for any DRF view or viewset under /api/v1/orgs/<slug>/.
 
-    The organization's schema is activated only after the caller is authenticated and
-    has an active membership there, and the connection always goes back to `public`
-    when the request ends. An unknown slug, somebody else's organization and an
-    inactive membership all give the same 404.
+    List it before the DRF base class: `class LockerList(TenantViewMixin, ListAPIView)`.
+
+    Order of events for a request:
+
+    1. Authentication (always required, whatever `permission_classes` a subclass sets).
+    2. The caller's active membership for the slug is loaded and put on
+       `request.membership`. An unknown slug, somebody else's organization and an
+       inactive membership all give the same 404.
+    3. The subclass's permission classes run and can use `request.membership`
+       (a member without the right role gets a 403).
+    4. Throttles run, still on the `public` schema.
+    5. Only then is the organization's schema activated and the handler run.
+
+    The connection always goes back to `public` when the request ends.
     """
 
-    def initial(self, request, *args, **kwargs):
-        # Authentication, permissions and throttles run first; the schema is still
-        # `public` while they do.
-        super().initial(request, *args, **kwargs)
-        membership = get_active_membership(request.user, kwargs["slug"])
+    def check_permissions(self, request):
+        if not request.user or not request.user.is_authenticated:
+            self.permission_denied(request)
+        membership = get_active_membership(request.user, self.kwargs["slug"])
         if membership is None:
             raise NotFound()
         request.membership = membership
-        connection.set_tenant(membership.organization)
+        super().check_permissions(request)
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        connection.set_tenant(request.membership.organization)
 
     def dispatch(self, request, *args, **kwargs):
         try:
@@ -38,6 +55,10 @@ class TenantAPIView(APIView):
             connection.set_schema_to_public()
 
 
+class TenantAPIView(TenantViewMixin, APIView):
+    """For plain endpoints; use the mixin directly with generic views and viewsets."""
+
+
 class OrganizationView(TenantAPIView):
     def get(self, request, slug):
         membership = request.membership
@@ -47,4 +68,22 @@ class OrganizationView(TenantAPIView):
                 "name": membership.organization.name,
                 "role": membership.role,
             }
+        )
+
+
+class MemberListView(TenantViewMixin, ListAPIView):
+    """The organization's memberships, for its admins.
+
+    Memberships live in `public`, so the schema does not separate organizations
+    here: the filter on the caller's own organization does.
+    """
+
+    permission_classes = [IsOrgAdmin]
+    serializer_class = MemberSerializer
+
+    def get_queryset(self):
+        return (
+            Membership.objects.filter(organization=self.request.membership.organization)
+            .select_related("user")
+            .order_by("id")
         )
