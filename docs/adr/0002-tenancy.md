@@ -154,8 +154,36 @@ The view layer assumes synchronous workers.
   parcels at their own locker") are not part of this step and need their own design
   once lockers exist.
 
-Not done yet, deliberately kept for the next step: adding a member, changing a role
-and deactivating a member. They need the rule that an organization can never lose its
-last admin, and a decision on how to attach a membership to a phone number that has
-not signed in yet. The member list is not paginated because organizations have few
-members; revisit if that stops being true.
+The member list is not paginated because organizations have few members; revisit
+if that stops being true.
+
+## Member management (implemented)
+
+- **First admin.** `manage.py create_organization --name --slug --admin-phone` is a
+  platform operator's task. It checks the phone number before creating the schema. If
+  something still fails afterwards, the organization exists without an admin and the
+  admin can be added later.
+- **Adding a member** takes a phone number and a role. The number is normalized
+  first, so every spelling is the same person. A number that has never signed in gets
+  its account created, exactly as a first sign-in would; the membership only becomes
+  usable once the number's owner proves it with a one-time code. A former member is
+  reactivated with the new role. A bad number or role creates nothing.
+- **The last admin rule.** An organization can never lose its last active admin,
+  whether by demotion or deactivation. Membership changes lock the organization's row,
+  so two admins removing each other at the same moment cannot both succeed; a test
+  with real threads covers it. The API answers 409.
+- **No deletion.** Members are deactivated, because records created later (parcels)
+  will refer to users, and the history must stay readable.
+- **Endpoints**, admins only: `POST` and `GET` on `/members/`, `PATCH` on
+  `/members/<id>/`. A member id from another organization answers 404, the same as an
+  id that does not exist.
+
+Known gaps, on purpose not hidden:
+
+- Adding a phone number grants access to whoever controls that number when they sign
+  in. A recycled number would pass to its new owner, so admins must deactivate people
+  who leave.
+- The person added is not asked for consent (no invitation step).
+- Membership changes are not audited yet (who changed what, and when). That needs its
+  own table and should be added before this goes near production.
+- Admin endpoints have no rate limit beyond authentication.

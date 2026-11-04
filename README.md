@@ -52,6 +52,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] Tenant context (membership-gated schema activation)
 - [x] Users and memberships
 - [x] Role-based permissions (Admin and Operator)
+- [x] Member management (add, change role, deactivate)
 - [ ] Lockers, parcels and state machine
 - [ ] Device simulator, retries and idempotency
 - [ ] Celery expiry task
@@ -85,11 +86,20 @@ Each organization has its own PostgreSQL schema ([ADR-0002](docs/adr/0002-tenanc
 Users, memberships and tokens live in the `public` schema; lockers and parcels will
 live in the organization's schema. Apply migrations with
 `uv run python manage.py migrate_schemas` (shared apps in `public`, then every
-organization's schema). Organizations are created with
-`organizations.services.create_organization`; there is no public endpoint for it yet.
+organization's schema). A platform operator creates an organization and its first
+admin with:
+
+```bash
+uv run python manage.py create_organization --name "Acme" --slug acme --admin-phone 09123456789
+```
+
+There is no public endpoint for creating organizations yet.
 
 Tenant endpoints live under `/api/v1/orgs/<slug>/` and are served only to active
 members; `GET /api/v1/orgs/<slug>/` returns the organization and the caller's role.
 Anyone else gets the same 404 whether the organization exists or not. A member
 without the required role gets a 403. `GET /api/v1/orgs/<slug>/members/` lists the
-memberships and is for admins only.
+memberships and is for admins only. Admins also add members (`POST` to the same
+URL, with a phone number and a role) and change a member's role or active flag
+(`PATCH /api/v1/orgs/<slug>/members/<id>/`). Members are never deleted, only
+deactivated, and an organization cannot lose its last active admin (409).
