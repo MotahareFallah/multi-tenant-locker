@@ -103,3 +103,43 @@ memberships and is for admins only. Admins also add members (`POST` to the same
 URL, with a phone number and a role) and change a member's role or active flag
 (`PATCH /api/v1/orgs/<slug>/members/<id>/`). Members are never deleted, only
 deactivated, and an organization cannot lose its last active admin (409).
+
+## Running locally
+
+A walkthrough of the full flow on a development machine. In development the
+SMS backend prints the code to the server log instead of sending it.
+
+```bash
+docker compose up -d db redis
+uv run python manage.py migrate_schemas
+uv run python manage.py create_organization --name "Acme" --slug acme --admin-phone 09123456789
+uv run python manage.py runserver 8010   # any free port works
+```
+
+In another terminal, request a code for the admin phone:
+
+```bash
+curl -s -X POST http://127.0.0.1:8010/api/v1/auth/otp/request/ \
+  -H "Content-Type: application/json" -d '{"phone_number": "09123456789"}'
+```
+
+The server log shows a line like `DEV SMS to +98...: Your verification code is ...`.
+Use that code to sign in:
+
+```bash
+curl -s -X POST http://127.0.0.1:8010/api/v1/auth/otp/verify/ \
+  -H "Content-Type: application/json" \
+  -d '{"phone_number": "09123456789", "code": "<code from the log>"}'
+```
+
+The response contains `access` and `refresh` tokens. Call the organization
+endpoint with the access token:
+
+```bash
+curl -s http://127.0.0.1:8010/api/v1/orgs/acme/ \
+  -H "Authorization: Bearer <access token>"
+```
+
+It returns the organization's slug and name and your role. A user who is not an
+active member of `acme` gets the same `404` as for an organization that does
+not exist.
