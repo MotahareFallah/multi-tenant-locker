@@ -1,6 +1,12 @@
 import secrets
 
-from .models import Membership, Organization
+from django.core.exceptions import ValidationError
+from django.db import transaction
+
+from accounts.customer_auth import get_or_create_user
+from accounts.phone import normalize_phone_number
+
+from .models import Membership, Organization, Role
 
 
 def _new_schema_name():
@@ -42,3 +48,101 @@ def get_active_membership(user, slug):
         .filter(user=user, organization__slug=slug, is_active=True)
         .first()
     )
+
+
+class LastAdminError(Exception):
+    """The change would leave the organization without an active admin."""
+
+
+def _locked_membership(membership):
+    """Serialize membership changes per organization; return a fresh copy.
+
+    The organization row is locked, not the membership: two admins removing each
+    other touch two different membership rows, but both need this one lock, so the
+    second change sees the result of the first. Reloading under the lock means a
+    stale object in the caller's hands is harmless.
+    """
+    Organization.objects.select_for_update().get(pk=membership.organization_id)
+    return Membership.objects.get(pk=membership.pk)
+
+
+def _is_last_active_admin(membership):
+    if membership.role != Role.ADMIN or not membership.is_active:
+        return False
+    others = Membership.objects.filter(
+        organization_id=membership.organization_id,
+        role=Role.ADMIN,
+        is_active=True,
+    ).exclude(pk=membership.pk)
+    return not others.exists()
+
+
+@transaction.atomic
+def change_role(membership, role):
+    if role not in Role.values:
+        raise ValidationError("Unknown role.")
+    membership = _locked_membership(membership)
+    if role != Role.ADMIN and _is_last_active_admin(membership):
+        raise LastAdminError
+    membership.role = role
+    membership.save(update_fields=["role"])
+    return membership
+
+
+@transaction.atomic
+def deactivate_member(membership):
+    membership = _locked_membership(membership)
+    if _is_last_active_admin(membership):
+        raise LastAdminError
+    membership.is_active = False
+    membership.save(update_fields=["is_active"])
+    return membership
+
+
+@transaction.atomic
+def reactivate_member(membership):
+    membership = _locked_membership(membership)
+    membership.is_active = True
+    membership.save(update_fields=["is_active"])
+    return membership
+
+
+@transaction.atomic
+def add_member_by_phone(*, organization, phone_number, role):
+    """Give a role to the person with this phone number.
+
+    The number is normalized first, so every spelling of it is the same person. A
+    number that has never signed in gets its account created now; the membership
+    only becomes usable once its owner proves the number with a one-time code. A
+    former member is reactivated with the new role. Nothing is created when the
+    number or the role is invalid.
+    """
+    if role not in Role.values:
+        raise ValidationError("Unknown role.")
+    user = get_or_create_user(normalize_phone_number(phone_number))
+    # Same lock as the last-admin rule, so concurrent changes line up.
+    Organization.objects.select_for_update().get(pk=organization.pk)
+    existing = Membership.objects.filter(organization=organization, user=user).first()
+    if existing is None:
+        return add_member(organization=organization, user=user, role=role)
+    if existing.is_active:
+        raise ValidationError("This person is already a member.")
+    existing.role = role
+    existing.is_active = True
+    existing.save(update_fields=["role", "is_active"])
+    return existing
+
+
+def create_organization_with_admin(*, name, slug, admin_phone):
+    """Create an organization and its first admin (a platform operator's task).
+
+    The phone number is checked before the schema is created. If something still
+    fails afterwards, the organization exists without an admin and the admin can be
+    added with `add_member_by_phone`.
+    """
+    admin_phone = normalize_phone_number(admin_phone)
+    organization = create_organization(name=name, slug=slug)
+    add_member_by_phone(
+        organization=organization, phone_number=admin_phone, role=Role.ADMIN
+    )
+    return organization
