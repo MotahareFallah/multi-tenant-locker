@@ -116,6 +116,7 @@ SMS_SENDER_FIELD = env("SMS_SENDER_FIELD", default="from")
 OTP_HMAC_KEY = env("OTP_HMAC_KEY", default="")
 OTP_MAX_REQUESTS_PER_WINDOW = 5
 OTP_RATE_WINDOW_SECONDS = 3600
+PARCEL_STORAGE_DAYS = env.int("PARCEL_STORAGE_DAYS", default=7)
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CACHES = {
