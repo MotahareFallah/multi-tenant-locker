@@ -1,6 +1,6 @@
 # ADR-0003: Parcel lifecycle (state machine, pickup, idempotency)
 
-Status: proposed
+Status: accepted
 
 ## Context
 
@@ -26,7 +26,7 @@ described here lives in the tenant schema (ADR-0002).
 | PICKUP_IN_PROGRESS | DELIVERED | Device confirms the door opened |
 | PICKUP_IN_PROGRESS | PICKUP_FAILED | Device reports a fault or does not answer in time |
 | PICKUP_FAILED | READY_FOR_PICKUP | Retry allowed (recipient tries again) |
-| STORED, READY_FOR_PICKUP, PICKUP_FAILED | EXPIRED | Storage deadline passed (Celery job) |
+| CREATED, STORED, READY_FOR_PICKUP, PICKUP_FAILED | EXPIRED | Storage deadline passed (Celery job) |
 
 DELIVERED and EXPIRED are terminal. Any transition not in the table is
 rejected with `InvalidTransition` (HTTP 409).
@@ -110,16 +110,36 @@ invalid, not applied.
 - Isolation: a parcel, its events and idempotency keys are invisible to another
   organization.
 
-## Open questions
+## Decisions made after review
 
-- A device timeout is ambiguous: the door may have opened. Proposed default is
-  PICKUP_FAILED followed by manual or reconciled confirmation. Needs a decision.
-- Whether CREATED can expire (a parcel never deposited).
-- How many pickup retries before a parcel is blocked.
-- Whether the pickup code is a one-time value stored hashed (proposed: yes, as
-  with OTP in ADR-0001).
-- Locker and compartment model (sizes, assignment) is out of scope here and gets
-  its own section when the models are written.
+- **Device timeout.** A timeout is ambiguous because the door may have opened.
+  It is treated as a failure: the parcel goes to PICKUP_FAILED and counts as an
+  attempt. The parcel is not made available again automatically; an operator
+  confirms the real state first.
+- **Expiry of CREATED.** A parcel that was never deposited can expire
+  (CREATED -> EXPIRED), so it does not stay in listings forever.
+- **Retry limit.** Every entry into PICKUP_FAILED counts one attempt. After 3
+  failed attempts, PICKUP_FAILED -> READY_FOR_PICKUP is rejected
+  (`PickupAttemptsExhausted`) unless an operator overrides it, which resets the
+  counter. Expiry stays possible in any case.
+- **Pickup code.** One-time value, stored only as an HMAC hash (as with OTP in
+  ADR-0001). It is created by a separate service (`issue_pickup_code`), which then
+  calls `transition()`. `transition()` only changes state, so the rules stay
+  testable without hashing or messaging.
+- **Locker model.** A locker has compartments; a compartment has a size (small,
+  medium, large). A parcel is stored in a compartment of its own size.
+
+## Enforced in the database
+
+State rules in code are not enough when two requests race, so the schema also
+enforces them:
+
+- one parcel in an occupying state (STORED, READY_FOR_PICKUP, PICKUP_IN_PROGRESS,
+  PICKUP_FAILED) per compartment, as a partial unique constraint;
+- an occupying state requires a compartment;
+- the status must be one of the known values.
+
+DELIVERED and EXPIRED free the compartment.
 
 ## Order of work
 
