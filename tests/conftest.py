@@ -76,3 +76,19 @@ def local_memory_cache(settings):
         }
     }
     cache.clear()
+
+
+@pytest.fixture
+def make_org():
+    from organizations.services import create_organization
+
+    created = []
+
+    def make(slug):
+        organization = create_organization(name=slug, slug=slug)
+        created.append(organization)
+        return organization
+
+    yield make
+    for organization in created:
+        organization.delete(force_drop=True)
