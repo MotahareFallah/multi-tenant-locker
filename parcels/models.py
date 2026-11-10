@@ -58,6 +58,7 @@ class Parcel(models.Model):
     )
     pickup_code_hash = models.CharField(max_length=64, blank=True, default="")
     pickup_attempts = models.PositiveSmallIntegerField(default=0)
+    wrong_code_attempts = models.PositiveSmallIntegerField(default=0)
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
