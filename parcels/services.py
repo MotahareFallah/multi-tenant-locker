@@ -3,10 +3,11 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
+from accounts import sms
 from accounts.phone import normalize_phone_number
 from lockers.models import Compartment
 from parcels.models import OCCUPYING_STATUSES, Parcel, ParcelEvent, ParcelStatus
@@ -20,6 +21,10 @@ class LockerUnavailable(Exception):
 
 class NoFreeCompartment(Exception):
     """No free, active compartment of the parcel's size in the locker."""
+
+
+class PickupCodeDeliveryFailed(Exception):
+    """The code was issued, but the SMS could not be sent. Send it again."""
 
 
 @transaction.atomic
@@ -92,10 +97,28 @@ def deposit_parcel(parcel_id, *, actor):
 
 @transaction.atomic
 def issue_pickup_code(parcel_id, *, actor):
-    """Make the parcel ready for pickup and return the code. Shown only once."""
+    """Make a parcel ready for pickup and return a new code. Shown only once.
+
+    A parcel that is already READY_FOR_PICKUP gets a replacement code (a re-send):
+    the old code stops working and the wrong-code counter starts again, which also
+    frees a parcel that was blocked by too many wrong codes.
+    """
     parcel = Parcel.objects.select_for_update().get(pk=parcel_id)
     code = generate_pickup_code()
     parcel.pickup_code_hash = hash_pickup_code(parcel.tracking_code, code)
+    if parcel.status == ParcelStatus.READY_FOR_PICKUP:
+        parcel.wrong_code_attempts = 0
+        parcel.save(
+            update_fields=["pickup_code_hash", "wrong_code_attempts", "updated_at"]
+        )
+        ParcelEvent.objects.create(
+            parcel=parcel,
+            from_status=parcel.status,
+            to_status=parcel.status,
+            actor=actor,
+            reason="pickup code re-sent",
+        )
+        return code
     parcel.save(update_fields=["pickup_code_hash", "updated_at"])
     # If the state does not allow this, the whole transaction rolls back and the
     # new hash is not kept.
@@ -106,3 +129,29 @@ def issue_pickup_code(parcel_id, *, actor):
         reason="pickup code issued",
     )
     return code
+
+
+def send_pickup_code(parcel_id, *, actor):
+    """Issue (or re-issue) the pickup code and text it to the recipient.
+
+    The code is only ever in the SMS: it is not returned, logged or stored. If the
+    SMS fails the parcel stays READY_FOR_PICKUP and the operator sends it again.
+    """
+    if connection.in_atomic_block:
+        raise RuntimeError("send_pickup_code must not run inside a transaction.")
+    code = issue_pickup_code(parcel_id, actor=actor)
+    parcel = Parcel.objects.get(pk=parcel_id)
+    try:
+        sms.get_sms_backend().send(
+            parcel.recipient_phone,
+            f"Parcel {parcel.tracking_code}: your pickup code is {code}",
+        )
+    except sms.SmsDeliveryError as exc:
+        ParcelEvent.objects.create(
+            parcel=parcel,
+            from_status=parcel.status,
+            to_status=parcel.status,
+            actor=actor,
+            reason="pickup code SMS failed",
+        )
+        raise PickupCodeDeliveryFailed("The pickup code could not be sent.") from exc
