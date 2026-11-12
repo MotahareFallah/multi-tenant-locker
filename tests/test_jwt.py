@@ -22,7 +22,10 @@ def test_access_tokens_are_short_lived(refresh_token):
     response = refresh(refresh_token)
     assert response.status_code == 200
     access = AccessToken(response.data["access"])
-    assert access["exp"] - access["iat"] == 15 * 60
+    lifetime = access["exp"] - access["iat"]
+    # `exp` counts from when the refresh token was read and `iat` from a moment
+    # later, so a second boundary in between gives 899, not 900.
+    assert 15 * 60 - 5 <= lifetime <= 15 * 60
 
 
 def test_refresh_tokens_last_seven_days(refresh_token):

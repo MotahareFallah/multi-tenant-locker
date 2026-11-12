@@ -5,7 +5,7 @@ import pytest
 from django.core.cache import cache
 from django.db import connections
 
-from accounts import otp
+from accounts import otp, sms
 from accounts.sms import SmsBackend
 
 
@@ -21,6 +21,7 @@ class InMemorySmsBackend(SmsBackend):
 def sms_outbox(monkeypatch):
     backend = InMemorySmsBackend()
     monkeypatch.setattr(otp, "get_sms_backend", lambda: backend)
+    monkeypatch.setattr(sms, "get_sms_backend", lambda: backend)
     return backend.outbox
 
 
