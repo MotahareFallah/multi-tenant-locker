@@ -8,7 +8,7 @@ from rest_framework.generics import ListCreateAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Membership
+from .models import Membership, Organization
 from .permissions import IsOrgAdmin
 from .serializers import (
     MemberCreateSerializer,
@@ -25,8 +25,32 @@ from .services import (
 )
 
 
-class TenantViewMixin:
-    """Tenant handling for any DRF view or viewset under /api/v1/orgs/<slug>/.
+class TenantContextMixin:
+    """Activates `request.tenant`'s schema for the handler and always undoes it.
+
+    Subclasses set `request.tenant` in `check_permissions`. The schema is activated
+    only after authentication, permissions and throttles, which all run on `public`.
+    """
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        connection.set_tenant(request.tenant)
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            response = super().dispatch(request, *args, **kwargs)
+            # DRF renders after dispatch returns. Render now, while the tenant
+            # schema is active, so lazy querysets in the response data are
+            # evaluated in the right schema.
+            if hasattr(response, "render") and not response.is_rendered:
+                response.render()
+            return response
+        finally:
+            connection.set_schema_to_public()
+
+
+class TenantViewMixin(TenantContextMixin):
+    """Tenant handling for staff views under /api/v1/orgs/<slug>/.
 
     List it before the DRF base class: `class LockerList(TenantViewMixin, ListAPIView)`.
 
@@ -51,23 +75,28 @@ class TenantViewMixin:
         if membership is None:
             raise NotFound()
         request.membership = membership
+        request.tenant = membership.organization
         super().check_permissions(request)
 
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-        connection.set_tenant(request.membership.organization)
 
-    def dispatch(self, request, *args, **kwargs):
-        try:
-            response = super().dispatch(request, *args, **kwargs)
-            # DRF renders after dispatch returns. Render now, while the tenant
-            # schema is active, so lazy querysets in the response data are
-            # evaluated in the right schema.
-            if hasattr(response, "render") and not response.is_rendered:
-                response.render()
-            return response
-        finally:
-            connection.set_schema_to_public()
+class CustomerTenantMixin(TenantContextMixin):
+    """Tenant handling for customer views under /api/v1/orgs/<slug>/my/.
+
+    A customer is not a member of the organization, so there is no membership and
+    no role here. Any signed-in user can activate the schema of any existing
+    organization. The view alone must make sure that only the caller's own data is
+    reachable (for parcels: `recipient_phone == request.user.phone_number`).
+    An unknown slug gives 404.
+    """
+
+    def check_permissions(self, request):
+        if not request.user or not request.user.is_authenticated:
+            self.permission_denied(request)
+        organization = Organization.objects.filter(slug=self.kwargs["slug"]).first()
+        if organization is None:
+            raise NotFound()
+        request.tenant = organization
+        super().check_permissions(request)
 
 
 class TenantAPIView(TenantViewMixin, APIView):
