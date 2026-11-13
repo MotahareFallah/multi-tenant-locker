@@ -132,7 +132,7 @@ def sms_http_backend_is_configured(app_configs, **kwargs):
     return []
 
 
-THROTTLE_SCOPES = ("otp_request", "otp_verify", "token")
+THROTTLE_SCOPES = ("otp_request", "otp_verify", "token", "pickup")
 
 
 def _rest_framework_settings():
