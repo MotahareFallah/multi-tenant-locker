@@ -1,10 +1,12 @@
 import pytest
 
 from accounts.checks import (
+    THROTTLE_SCOPES,
     proxy_count_is_valid,
     proxy_count_matches_deployment,
     throttle_rates_are_valid,
 )
+from accounts.throttling import PickupThrottle
 
 
 def ids(messages):
@@ -24,7 +26,7 @@ def test_the_default_rates_are_valid():
     assert throttle_rates_are_valid(None) == []
 
 
-@pytest.mark.parametrize("scope", ["otp_request", "otp_verify", "token"])
+@pytest.mark.parametrize("scope", THROTTLE_SCOPES)
 def test_a_missing_rate_is_an_error(settings, scope):
     rates = dict(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
     del rates[scope]
@@ -36,7 +38,15 @@ def test_a_missing_rate_is_an_error(settings, scope):
 
 def test_missing_throttle_settings_are_reported_not_raised(settings):
     set_rest_framework(settings, DEFAULT_THROTTLE_RATES=None)
-    assert ids(throttle_rates_are_valid(None)) == ["accounts.E010"] * 3
+    assert ids(throttle_rates_are_valid(None)) == ["accounts.E010"] * len(
+        THROTTLE_SCOPES
+    )
+
+
+def test_the_pickup_scope_is_checked_and_has_a_usable_rate():
+    assert "pickup" in THROTTLE_SCOPES
+    assert PickupThrottle.scope == "pickup"
+    assert PickupThrottle().num_requests > 0
 
 
 @pytest.mark.parametrize(
