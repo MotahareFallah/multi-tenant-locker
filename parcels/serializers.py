@@ -62,6 +62,10 @@ class CustomerParcelSerializer(ParcelSerializer):
         ]
 
 
+class PickupSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=32)
+
+
 class ParcelCreateSerializer(serializers.Serializer):
     locker = serializers.SlugRelatedField(
         slug_field="code", queryset=Locker.objects.all()
