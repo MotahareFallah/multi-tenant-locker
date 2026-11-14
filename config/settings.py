@@ -130,6 +130,8 @@ REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_IGNORE_RESULT = True
+# How often the cleanup tasks run; what they delete is decided by their own rules.
+PURGE_INTERVAL_SECONDS = env.float("PURGE_INTERVAL_SECONDS", default=86400.0)
 CELERY_BEAT_SCHEDULE = {
     "expire-overdue-parcels": {
         "task": "parcels.expire_overdue",
@@ -138,6 +140,10 @@ CELERY_BEAT_SCHEDULE = {
     "recover-stuck-pickups": {
         "task": "parcels.recover_stuck_pickups",
         "schedule": env.float("PICKUP_RECOVERY_INTERVAL_SECONDS", default=60.0),
+    },
+    "purge-expired-idempotency-keys": {
+        "task": "idempotency.purge_expired_keys",
+        "schedule": PURGE_INTERVAL_SECONDS,
     },
 }
 
