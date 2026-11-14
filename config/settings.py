@@ -152,6 +152,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "accounts.purge_otp_challenges",
         "schedule": PURGE_INTERVAL_SECONDS,
     },
+    "flush-expired-tokens": {
+        "task": "accounts.flush_expired_tokens",
+        "schedule": PURGE_INTERVAL_SECONDS,
+    },
 }
 
 CACHES = {
