@@ -120,6 +120,8 @@ OTP_RATE_WINDOW_SECONDS = 3600
 PARCEL_STORAGE_DAYS = env.int("PARCEL_STORAGE_DAYS", default=7)
 DEVICE_BACKEND = env("DEVICE_BACKEND", default="devices.simulator.SimulatedDevice")
 IDEMPOTENCY_TTL_HOURS = env.int("IDEMPOTENCY_TTL_HOURS", default=24)
+# Must be far longer than any device timeout (see parcels/recovery.py).
+PICKUP_RECOVERY_MINUTES = env.int("PICKUP_RECOVERY_MINUTES", default=5)
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 
@@ -132,6 +134,10 @@ CELERY_BEAT_SCHEDULE = {
     "expire-overdue-parcels": {
         "task": "parcels.expire_overdue",
         "schedule": env.float("PARCEL_EXPIRY_INTERVAL_SECONDS", default=300.0),
+    },
+    "recover-stuck-pickups": {
+        "task": "parcels.recover_stuck_pickups",
+        "schedule": env.float("PICKUP_RECOVERY_INTERVAL_SECONDS", default=60.0),
     },
 }
 
