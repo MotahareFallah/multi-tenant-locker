@@ -117,6 +117,9 @@ SMS_SENDER_FIELD = env("SMS_SENDER_FIELD", default="from")
 OTP_HMAC_KEY = env("OTP_HMAC_KEY", default="")
 OTP_MAX_REQUESTS_PER_WINDOW = 5
 OTP_RATE_WINDOW_SECONDS = 3600
+# Closed or expired challenges are deleted after this many days. It must be
+# longer than the rate window (see accounts/maintenance.py).
+OTP_CHALLENGE_RETENTION_DAYS = env.int("OTP_CHALLENGE_RETENTION_DAYS", default=30)
 PARCEL_STORAGE_DAYS = env.int("PARCEL_STORAGE_DAYS", default=7)
 DEVICE_BACKEND = env("DEVICE_BACKEND", default="devices.simulator.SimulatedDevice")
 IDEMPOTENCY_TTL_HOURS = env.int("IDEMPOTENCY_TTL_HOURS", default=24)
@@ -143,6 +146,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "purge-expired-idempotency-keys": {
         "task": "idempotency.purge_expired_keys",
+        "schedule": PURGE_INTERVAL_SECONDS,
+    },
+    "purge-otp-challenges": {
+        "task": "accounts.purge_otp_challenges",
         "schedule": PURGE_INTERVAL_SECONDS,
     },
 }
