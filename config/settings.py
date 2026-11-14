@@ -128,6 +128,12 @@ REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_IGNORE_RESULT = True
+CELERY_BEAT_SCHEDULE = {
+    "expire-overdue-parcels": {
+        "task": "parcels.expire_overdue",
+        "schedule": env.float("PARCEL_EXPIRY_INTERVAL_SECONDS", default=300.0),
+    },
+}
 
 CACHES = {
     "default": {
