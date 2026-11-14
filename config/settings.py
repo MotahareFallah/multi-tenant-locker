@@ -122,6 +122,13 @@ DEVICE_BACKEND = env("DEVICE_BACKEND", default="devices.simulator.SimulatedDevic
 IDEMPOTENCY_TTL_HOURS = env.int("IDEMPOTENCY_TTL_HOURS", default=24)
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
+# Celery gets its own Redis database, so flushing the cache never drops queued
+# tasks. Results are not stored: the tasks report through the database.
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/1")
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TASK_IGNORE_RESULT = True
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
