@@ -44,6 +44,24 @@ class ParcelDetailSerializer(ParcelSerializer):
         fields = [*ParcelSerializer.Meta.fields, "events"]
 
 
+class CustomerParcelSerializer(ParcelSerializer):
+    """What a recipient sees: where the parcel is and in which state.
+
+    No attempt counters, no history and no staff identifiers.
+    """
+
+    class Meta(ParcelSerializer.Meta):
+        fields = [
+            "tracking_code",
+            "locker",
+            "compartment",
+            "size",
+            "status",
+            "expires_at",
+            "created_at",
+        ]
+
+
 class ParcelCreateSerializer(serializers.Serializer):
     locker = serializers.SlugRelatedField(
         slug_field="code", queryset=Locker.objects.all()
