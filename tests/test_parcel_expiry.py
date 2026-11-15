@@ -9,6 +9,7 @@ from django_tenants.utils import tenant_context
 
 from config import celery_app
 from lockers.models import Compartment, CompartmentSize, Locker
+from organizations.tenancy import OrganizationJobsFailed
 from parcels import expiry
 from parcels.expiry import expire_all_organizations, expire_overdue_parcels
 from parcels.models import Parcel, ParcelEvent, ParcelStatus
@@ -153,7 +154,9 @@ def test_every_organization_is_visited(world, make_org):
     assert connection.schema_name == "public"
 
 
-def test_an_organization_that_fails_does_not_stop_the_others(world, make_org, monkeypatch):
+def test_an_organization_that_fails_is_reported_after_the_others_were_done(
+    world, make_org, monkeypatch
+):
     other = build_world(make_org("globex"))
     mine = make_parcel(world, S.STORED)
     theirs = make_parcel(other, S.STORED)
@@ -165,7 +168,10 @@ def test_an_organization_that_fails_does_not_stop_the_others(world, make_org, mo
         return real(**kwargs)
 
     monkeypatch.setattr(expiry, "expire_overdue_parcels", broken_for_acme)
-    assert expire_all_organizations() == {"globex": 1}
+    with pytest.raises(OrganizationJobsFailed) as caught:
+        expire_all_organizations()
+    assert caught.value.results == {"globex": 1}
+    assert caught.value.failed == ["acme"]
     assert status_of(world, mine) == S.STORED
     assert status_of(other, theirs) == S.EXPIRED
     assert connection.schema_name == "public"
@@ -183,3 +189,15 @@ def test_the_beat_schedule_points_at_the_registered_task():
     assert entry["task"] == expire_overdue_parcels_task.name
     assert entry["task"] in celery_app.tasks
     assert entry["schedule"] > 0
+
+
+def test_the_task_fails_when_an_organization_fails(world, monkeypatch):
+    make_parcel(world, S.STORED)
+
+    def always_broken(**kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(expiry, "expire_overdue_parcels", always_broken)
+    result = expire_overdue_parcels_task.apply()
+    assert result.failed()
+    assert isinstance(result.result, OrganizationJobsFailed)
