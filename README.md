@@ -2,7 +2,8 @@
 
 Multi-tenant parcel locker management backend. Django, Django REST Framework, PostgreSQL, Celery and Redis.
 
-> Status: work in progress.
+> Status: the v1 backend is feature-complete. What it knowingly does not do is
+> listed in [Known gaps](docs/known-gaps.md).
 
 ## Goals
 
@@ -14,17 +15,19 @@ The aim is a backend whose guarantees are testable, not a set of CRUD endpoints:
 - **Concurrency safety**: two simultaneous pickups of the same parcel cannot both succeed.
 - **Idempotency**: repeating a request with the same key does not repeat its side effects.
 
-## Planned scope (v1)
+## Scope (v1)
 
 - Tenant provisioning and context management
 - Users, memberships and role-based access (Admin, Operator)
-- Lockers and parcels with a validated state machine
+- Lockers with sized compartments, and parcels with a validated state machine
 - Device simulator with fault injection (timeout, unknown result)
 - Idempotency keys and row locking on pickup
-- Celery task for parcel expiry
+- Celery tasks: parcel expiry, recovery of stuck pickups and cleanup
 - Isolation, concurrency and failure tests on real PostgreSQL, plus CI
 
-Deliberately out of scope for v1: notifications, a full transactional outbox, multi-size lockers, admin UI and billing.
+Deliberately out of scope for v1: notifications beyond the pickup SMS, a full
+transactional outbox, an admin UI or front end, billing, and a real SMS provider
+and device driver.
 
 ## Getting started
 
@@ -32,7 +35,7 @@ Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
 PostgreSQL is required; SQLite is deliberately not supported (see ADR-0001).
 
     cp .env.example .env
-    # set DJANGO_SECRET_KEY in .env to a random value
+    # in .env, set DJANGO_SECRET_KEY and OTP_HMAC_KEY to two different random values
     docker compose up -d
     uv sync
     uv run python manage.py check --database default
@@ -53,10 +56,14 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] Users and memberships
 - [x] Role-based permissions (Admin and Operator)
 - [x] Member management (add, change role, deactivate)
-- [ ] Lockers, parcels and state machine
-- [ ] Device simulator, retries and idempotency
-- [ ] Celery expiry task
-- [ ] Security, concurrency and failure test suite
+- [x] Lockers and compartments (admin endpoints)
+- [x] Parcels and the state machine (ADR-0003)
+- [x] Device simulator with fault injection
+- [x] Idempotency keys and pickup with row locking
+- [x] HTTP API for staff and customers (ADR-0004)
+- [x] Celery: expiry, recovery of stuck pickups and cleanup
+- [x] Isolation, concurrency and failure test suite
+- [ ] A real SMS provider and a real device driver (see Known gaps)
 
 ## Authentication
 
@@ -76,15 +83,16 @@ proxies in front of the app** (default `0`: only the socket address is used and
 limit (too low) or a forged header can dodge it (too high).
 `manage.py check --deploy` warns while it is `0`.
 
-Maintenance: `manage.py purge_otp_challenges` deletes old closed or expired OTP
-challenges, and SimpleJWT's `manage.py flushexpiredtokens` clears expired entries
-from the token blacklist. Both are meant to run daily once Celery is in place.
+Maintenance: Celery beat runs both cleanups daily (see Background jobs). They can
+also be run by hand: `manage.py purge_otp_challenges` deletes old closed or
+expired OTP challenges, and SimpleJWT's `manage.py flushexpiredtokens` clears
+expired entries from the token blacklist.
 
 ## Organizations
 
 Each organization has its own PostgreSQL schema ([ADR-0002](docs/adr/0002-tenancy.md)).
-Users, memberships and tokens live in the `public` schema; lockers and parcels will
-live in the organization's schema. Apply migrations with
+Users, memberships and tokens live in the `public` schema; lockers, parcels and
+idempotency keys live in the organization's schema. Apply migrations with
 `uv run python manage.py migrate_schemas` (shared apps in `public`, then every
 organization's schema). A platform operator creates an organization and its first
 admin with:
@@ -103,6 +111,73 @@ memberships and is for admins only. Admins also add members (`POST` to the same
 URL, with a phone number and a role) and change a member's role or active flag
 (`PATCH /api/v1/orgs/<slug>/members/<id>/`). Members are never deleted, only
 deactivated, and an organization cannot lose its last active admin (409).
+
+## Lockers, parcels and pickup
+
+A locker has compartments of a size (small, medium or large). A parcel is stored
+in a free compartment of its own size, and its status changes only through
+`parcels.state_machine.transition()` ([ADR-0003](docs/adr/0003-parcel-lifecycle.md)):
+
+- `CREATED` -> `STORED` (deposit) -> `READY_FOR_PICKUP` (a pickup code was texted)
+  -> `PICKUP_IN_PROGRESS` (the right code) -> `DELIVERED`.
+- A device fault or timeout during pickup gives `PICKUP_FAILED`, never
+  `DELIVERED`. An operator sends a new code to retry; after 3 failed attempts an
+  operator override is needed.
+- `CREATED`, `STORED`, `READY_FOR_PICKUP` and `PICKUP_FAILED` become `EXPIRED`
+  when the storage period (`PARCEL_STORAGE_DAYS`) ends.
+
+The database enforces the rest: one active parcel per compartment, and an
+occupying status needs a compartment.
+
+All paths are under `/api/v1/orgs/<slug>/`
+([ADR-0004](docs/adr/0004-http-api.md)):
+
+| Who | Endpoint | What it does |
+|---|---|---|
+| Admin | `lockers/`, `lockers/<code>/` | list, create, read and switch lockers on or off |
+| Admin | `lockers/<code>/compartments/`, `.../compartments/<number>/` | add a compartment, switch it on or off |
+| Operator | `POST parcels/` | create a parcel |
+| Operator | `GET parcels/`, `GET parcels/<tracking_code>/` | list (filter with `?status=`) and read, with history |
+| Operator | `POST parcels/<tracking_code>/deposit/` | put it into a compartment |
+| Operator | `POST parcels/<tracking_code>/pickup-code/` | text a new pickup code to the recipient |
+| Customer | `GET my/parcels/`, `GET my/parcels/<tracking_code>/` | the customer's own parcels |
+| Customer | `POST my/parcels/<tracking_code>/pickup/` | open the door with `{"code": "..."}` |
+
+Admins can do everything operators can. Customers are the recipients of parcels:
+they are not members of the organization, they sign in with their phone number
+like everyone else, and they can reach only parcels addressed to their own number.
+Someone else's parcel looks exactly like one that does not exist (404).
+
+Every state-changing `POST` requires an `Idempotency-Key` header. Repeating a
+request with the same key returns the first response again
+(`Idempotent-Replayed: true`) and does not run it twice. The pickup code is
+texted and never appears in any HTTP response or stored response. A device fault
+answers 502 and a device timeout 504; the parcel is then `PICKUP_FAILED`. The
+customer pickup endpoint also has a per-IP limit (`PICKUP_IP_RATE`).
+
+## Background jobs
+
+Celery runs the periodic work. Start one worker and exactly one beat process:
+
+```bash
+uv run celery -A config worker --loglevel=info
+uv run celery -A config beat --loglevel=info
+```
+
+The broker is Redis database 1 (`CELERY_BROKER_URL`); the cache uses database 0.
+
+| Task | What it does | How often |
+|---|---|---|
+| `parcels.expire_overdue` | expires parcels past their storage period | `PARCEL_EXPIRY_INTERVAL_SECONDS` (5 min) |
+| `parcels.recover_stuck_pickups` | fails pickups stuck in `PICKUP_IN_PROGRESS` longer than `PICKUP_RECOVERY_MINUTES` | `PICKUP_RECOVERY_INTERVAL_SECONDS` (1 min) |
+| `idempotency.purge_expired_keys` | deletes expired idempotency keys | `PURGE_INTERVAL_SECONDS` (daily) |
+| `accounts.purge_otp_challenges` | deletes old closed or expired OTP challenges | `PURGE_INTERVAL_SECONDS` (daily) |
+| `accounts.flush_expired_tokens` | clears expired refresh tokens | `PURGE_INTERVAL_SECONDS` (daily) |
+
+Tasks that touch organization data visit every organization with an explicit
+`tenant_context`: there is no implicit tenant outside a request (ADR-0002). A
+failure in one organization is logged and does not stop the others. All tasks are
+safe to run twice.
 
 ## Running locally
 
@@ -143,3 +218,42 @@ curl -s http://127.0.0.1:8010/api/v1/orgs/acme/ \
 It returns the organization's slug and name and your role. A user who is not an
 active member of `acme` gets the same `404` as for an organization that does
 not exist.
+
+## Tests
+
+    docker compose up -d db redis
+    uv run pytest
+
+The tests run against real PostgreSQL and Redis, so about 600 of them take a few
+minutes: each test that needs an organization builds its own schema. They cover
+tenant isolation, concurrent pickups, deposits and idempotency keys (with real
+threads and row locks), every device fault, replay of stored responses, the
+background tasks and the HTTP API for each role. Celery tasks are tested by calling
+their functions directly and by running each task eagerly with `.apply()`, without
+a broker or worker.
+
+## CI and deployment
+
+GitHub Actions (`.github/workflows`) runs on every pull request and on pushes to
+`main`, with PostgreSQL and Redis as services: `uv sync --locked`, `ruff check`,
+`makemigrations --check`, `manage.py check`, `migrate_schemas` and `pytest`.
+
+There is no deployment pipeline and no Dockerfile for the application:
+`docker-compose.yml` only starts PostgreSQL and Redis for development. Production
+settings are guarded by deploy checks, which `manage.py check --deploy` runs. They
+report the console SMS backend, an incomplete HTTP SMS configuration, a missing
+or weak `OTP_HMAC_KEY`, and `TRUSTED_PROXY_COUNT` left at 0.
+
+## Design decisions
+
+- [ADR-0001](docs/adr/0001-otp-authentication.md): sign-in with a phone number and
+  a one-time code.
+- [ADR-0002](docs/adr/0002-tenancy.md): one PostgreSQL schema per organization.
+- [ADR-0003](docs/adr/0003-parcel-lifecycle.md): the parcel state machine, pickup,
+  device failures and idempotency.
+- [ADR-0004](docs/adr/0004-http-api.md): the HTTP API for staff and customers.
+
+## Known gaps
+
+What the project knowingly does not do, and why, is in
+[docs/known-gaps.md](docs/known-gaps.md).
