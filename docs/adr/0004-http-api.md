@@ -1,6 +1,6 @@
 # ADR-0004: HTTP API for lockers, parcels and pickup
 
-Status: proposed
+Status: accepted
 
 ## Context
 
@@ -83,7 +83,8 @@ the key belongs to the calling user (ADR-0003).
 
 | Situation | Status |
 |---|---|
-| unknown slug, not a member, someone else's parcel, unknown parcel | 404, always the same body |
+| unknown slug, or not a member of the organization (staff paths) | 404, one and the same body |
+| someone else's parcel, or a parcel that does not exist (customer paths) | 404, one and the same body |
 | member with too low a role | 403 |
 | invalid input | 400 |
 | missing or invalid `Idempotency-Key` | 400 |
@@ -117,6 +118,25 @@ many parcels.
 - SMS delivery becomes part of the operator flow; a real provider is still needed
   (ADR-0001 left it open).
 - Deposit, issue and create each need their own idempotency endpoint names.
+
+## Decisions made during implementation
+
+- **Replays and the SMS.** Replaying `pickup-code` with the same key does not send
+  another SMS. A new code needs a new key.
+- **A wrong code, replayed.** The same key with the same body replays the stored 403
+  and is not counted again. Another code needs another key (the same key with a
+  different body is 422). Every new key does count, so the per-parcel limit and the
+  per-IP throttle are what stop guessing.
+- **A spent code.** The pickup code is consumed as soon as it is accepted, before
+  the door command is sent. After a device failure the stored 502 or 504 is
+  replayed, and a new attempt needs a new code from an operator (ADR-0003).
+- **Bad input is not a guess.** A missing or blank `code` is 400 and is not counted.
+- **Throttle first.** The `pickup` throttle runs before the parcel is looked up, so
+  a throttled request touches nothing.
+- **What a customer sees.** Only `tracking_code`, `locker`, `compartment`, `size`,
+  `status`, `expires_at` and `created_at`: no counters, no history, no staff ids.
+- **Actors.** History records `user:<id>` for staff, `customer:<id>` for customers,
+  `device` for door results and `system` for background tasks.
 
 ## Required tests
 
