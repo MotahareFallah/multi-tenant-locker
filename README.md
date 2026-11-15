@@ -176,8 +176,9 @@ The broker is Redis database 1 (`CELERY_BROKER_URL`); the cache uses database 0.
 
 Tasks that touch organization data visit every organization with an explicit
 `tenant_context`: there is no implicit tenant outside a request (ADR-0002). A
-failure in one organization is logged and does not stop the others. All tasks are
-safe to run twice.
+failure in one organization is logged and does not stop the others; once all were
+tried, the task ends as failed, so the problem shows in Celery and not only in
+the log. All tasks are safe to run twice.
 
 ## Running locally
 
