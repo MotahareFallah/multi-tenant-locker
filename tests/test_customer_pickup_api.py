@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -7,6 +8,7 @@ from rest_framework.test import APIClient
 
 from accounts.throttling import PickupThrottle
 from devices.simulator import Fault
+from idempotency.models import IdempotencyKey
 from lockers.models import Compartment, CompartmentSize, Locker
 from parcels.device import get_device, reset_devices
 from parcels.models import Parcel
@@ -253,3 +255,29 @@ def test_pickup_requests_are_throttled_per_ip(world, monkeypatch):
     assert response.status_code == 429
     assert reload(world, parcel).wrong_code_attempts == 2
     assert get_device().calls == 0
+
+
+@pytest.mark.parametrize(
+    "outcome", ["delivered", "wrong_code", "device_fault", "device_timeout"]
+)
+def test_no_stored_response_holds_the_pickup_code_or_its_hash(world, outcome):
+    parcel = ready_parcel(world)
+    code_hash = reload(world, parcel).pickup_code_hash
+    assert code_hash
+    if outcome == "device_fault":
+        get_device().inject(Fault.ERROR)
+    if outcome == "device_timeout":
+        get_device().inject(Fault.TIMEOUT)
+    sent = wrong(parcel.code) if outcome == "wrong_code" else parcel.code
+
+    response = pickup(client_for(world.alice), parcel.tracking_code, {"code": sent})
+
+    seen = [response.content.decode()]
+    with tenant_context(world.org):
+        rows = list(IdempotencyKey.objects.all())
+        seen += [json.dumps(row.response_body) for row in rows]
+    assert rows
+    for text in seen:
+        assert parcel.code not in text
+        assert sent not in text
+        assert code_hash not in text
