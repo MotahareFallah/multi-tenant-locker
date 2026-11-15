@@ -2,7 +2,8 @@
 
 Multi-tenant parcel locker management backend. Django, Django REST Framework, PostgreSQL, Celery and Redis.
 
-> Status: work in progress.
+> Status: the v1 backend is feature-complete. What it knowingly does not do is
+> listed in [Known gaps](docs/known-gaps.md).
 
 ## Goals
 
@@ -14,17 +15,19 @@ The aim is a backend whose guarantees are testable, not a set of CRUD endpoints:
 - **Concurrency safety**: two simultaneous pickups of the same parcel cannot both succeed.
 - **Idempotency**: repeating a request with the same key does not repeat its side effects.
 
-## Planned scope (v1)
+## Scope (v1)
 
 - Tenant provisioning and context management
 - Users, memberships and role-based access (Admin, Operator)
-- Lockers and parcels with a validated state machine
+- Lockers with sized compartments, and parcels with a validated state machine
 - Device simulator with fault injection (timeout, unknown result)
 - Idempotency keys and row locking on pickup
-- Celery task for parcel expiry
+- Celery tasks: parcel expiry, recovery of stuck pickups and cleanup
 - Isolation, concurrency and failure tests on real PostgreSQL, plus CI
 
-Deliberately out of scope for v1: notifications, a full transactional outbox, multi-size lockers, admin UI and billing.
+Deliberately out of scope for v1: notifications beyond the pickup SMS, a full
+transactional outbox, an admin UI or front end, billing, and a real SMS provider
+and device driver.
 
 ## Getting started
 
@@ -32,7 +35,7 @@ Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
 PostgreSQL is required; SQLite is deliberately not supported (see ADR-0001).
 
     cp .env.example .env
-    # set DJANGO_SECRET_KEY in .env to a random value
+    # in .env, set DJANGO_SECRET_KEY and OTP_HMAC_KEY to two different random values
     docker compose up -d
     uv sync
     uv run python manage.py check --database default
@@ -53,10 +56,14 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] Users and memberships
 - [x] Role-based permissions (Admin and Operator)
 - [x] Member management (add, change role, deactivate)
-- [ ] Lockers, parcels and state machine
-- [ ] Device simulator, retries and idempotency
-- [ ] Celery expiry task
-- [ ] Security, concurrency and failure test suite
+- [x] Lockers and compartments (admin endpoints)
+- [x] Parcels and the state machine (ADR-0003)
+- [x] Device simulator with fault injection
+- [x] Idempotency keys and pickup with row locking
+- [x] HTTP API for staff and customers (ADR-0004)
+- [x] Celery: expiry, recovery of stuck pickups and cleanup
+- [x] Isolation, concurrency and failure test suite
+- [ ] A real SMS provider and a real device driver (see Known gaps)
 
 ## Authentication
 
@@ -76,15 +83,16 @@ proxies in front of the app** (default `0`: only the socket address is used and
 limit (too low) or a forged header can dodge it (too high).
 `manage.py check --deploy` warns while it is `0`.
 
-Maintenance: `manage.py purge_otp_challenges` deletes old closed or expired OTP
-challenges, and SimpleJWT's `manage.py flushexpiredtokens` clears expired entries
-from the token blacklist. Both are meant to run daily once Celery is in place.
+Maintenance: Celery beat runs both cleanups daily (see Background jobs). They can
+also be run by hand: `manage.py purge_otp_challenges` deletes old closed or
+expired OTP challenges, and SimpleJWT's `manage.py flushexpiredtokens` clears
+expired entries from the token blacklist.
 
 ## Organizations
 
 Each organization has its own PostgreSQL schema ([ADR-0002](docs/adr/0002-tenancy.md)).
-Users, memberships and tokens live in the `public` schema; lockers and parcels will
-live in the organization's schema. Apply migrations with
+Users, memberships and tokens live in the `public` schema; lockers, parcels and
+idempotency keys live in the organization's schema. Apply migrations with
 `uv run python manage.py migrate_schemas` (shared apps in `public`, then every
 organization's schema). A platform operator creates an organization and its first
 admin with:
