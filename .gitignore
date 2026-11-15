@@ -8,3 +8,6 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Celery beat schedule file
+celerybeat-schedule*
