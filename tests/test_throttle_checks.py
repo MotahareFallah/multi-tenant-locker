@@ -4,6 +4,7 @@ from accounts.checks import (
     THROTTLE_SCOPES,
     proxy_count_is_valid,
     proxy_count_matches_deployment,
+    ssl_redirect_works_behind_proxy,
     throttle_rates_are_valid,
 )
 from accounts.throttling import PickupThrottle
@@ -86,3 +87,38 @@ def test_a_configured_proxy_count_does_not_warn(settings):
 def test_an_invalid_proxy_count_is_left_to_the_error_check(settings):
     set_rest_framework(settings, NUM_PROXIES=None)
     assert proxy_count_matches_deployment(None) == []
+
+
+def test_redirect_behind_a_proxy_without_the_ssl_header_warns(settings):
+    set_rest_framework(settings, NUM_PROXIES=1)
+    settings.SECURE_SSL_REDIRECT = True
+    settings.SECURE_PROXY_SSL_HEADER = None
+    assert ids(ssl_redirect_works_behind_proxy(None)) == ["accounts.W002"]
+
+
+def test_the_ssl_header_silences_the_redirect_warning(settings):
+    set_rest_framework(settings, NUM_PROXIES=1)
+    settings.SECURE_SSL_REDIRECT = True
+    settings.SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    assert ssl_redirect_works_behind_proxy(None) == []
+
+
+def test_no_redirect_means_no_redirect_warning(settings):
+    set_rest_framework(settings, NUM_PROXIES=1)
+    settings.SECURE_SSL_REDIRECT = False
+    settings.SECURE_PROXY_SSL_HEADER = None
+    assert ssl_redirect_works_behind_proxy(None) == []
+
+
+def test_no_proxy_means_no_redirect_warning(settings):
+    set_rest_framework(settings, NUM_PROXIES=0)
+    settings.SECURE_SSL_REDIRECT = True
+    settings.SECURE_PROXY_SSL_HEADER = None
+    assert ssl_redirect_works_behind_proxy(None) == []
+
+
+def test_an_invalid_proxy_count_is_left_to_the_error_check_here_too(settings):
+    set_rest_framework(settings, NUM_PROXIES=None)
+    settings.SECURE_SSL_REDIRECT = True
+    settings.SECURE_PROXY_SSL_HEADER = None
+    assert ssl_redirect_works_behind_proxy(None) == []
