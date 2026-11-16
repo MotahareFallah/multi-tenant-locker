@@ -209,3 +209,28 @@ def proxy_count_matches_deployment(app_configs, **kwargs):
             )
         ]
     return []
+
+
+@register(Tags.security, deploy=True)
+def ssl_redirect_works_behind_proxy(app_configs, **kwargs):
+    value = _proxy_count()
+    behind_proxy = _is_valid_proxy_count(value) and value > 0
+    if (
+        behind_proxy
+        and getattr(settings, "SECURE_SSL_REDIRECT", False)
+        and not getattr(settings, "SECURE_PROXY_SSL_HEADER", None)
+    ):
+        return [
+            Warning(
+                "SECURE_SSL_REDIRECT is on and NUM_PROXIES is above 0, but "
+                "SECURE_PROXY_SSL_HEADER is not set.",
+                hint=(
+                    "Django sees every request as plain HTTP and redirects it "
+                    "forever. If the proxy terminates TLS and sets "
+                    "X-Forwarded-Proto, set BEHIND_TLS_PROXY=true; if the proxy "
+                    "does the redirect itself, set SECURE_SSL_REDIRECT=false."
+                ),
+                id="accounts.W002",
+            )
+        ]
+    return []
