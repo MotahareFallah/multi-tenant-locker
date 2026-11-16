@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from organizations.models import Role
-from organizations.services import add_member, create_organization
+from organizations.services import add_member
 from organizations.views import TenantAPIView
 
 
@@ -44,20 +44,6 @@ pytestmark = [
     pytest.mark.django_db(transaction=True),
     pytest.mark.urls(__name__),
 ]
-
-
-@pytest.fixture
-def make_org():
-    created = []
-
-    def make(slug):
-        organization = create_organization(name=slug, slug=slug)
-        created.append(organization)
-        return organization
-
-    yield make
-    for organization in created:
-        organization.delete(force_drop=True)
 
 
 @pytest.fixture
