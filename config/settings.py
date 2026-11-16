@@ -12,6 +12,18 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
 
+# HTTPS hardening. The first three are on by default when DEBUG is off, and each can
+# be set from the environment. HSTS is an explicit choice: a browser that has seen it
+# insists on HTTPS for that long, so start small.
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG)
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+# Only when a reverse proxy terminates TLS and sets (and overwrites) this header,
+# or a client could fake HTTPS.
+if env.bool("BEHIND_TLS_PROXY", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 SHARED_APPS = [
     "django_tenants",  # must be first
     "django.contrib.admin",

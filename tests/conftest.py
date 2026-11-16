@@ -93,3 +93,9 @@ def make_org():
     yield make
     for organization in created:
         organization.delete(force_drop=True)
+
+
+@pytest.fixture(autouse=True)
+def plain_http_in_tests(settings):
+    # Whatever the environment says, the test client talks plain HTTP.
+    settings.SECURE_SSL_REDIRECT = False
