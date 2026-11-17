@@ -13,6 +13,7 @@ from lockers.models import Compartment, CompartmentSize, Locker
 from parcels.device import get_device, reset_devices
 from parcels.models import Parcel
 from parcels.services import create_parcel, deposit_parcel, send_pickup_code
+from tests.helpers import client_for
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -54,12 +55,6 @@ def world(make_org, sms_outbox):
         alice=users.create(phone_number=ALICE),
         bob=users.create(phone_number=BOB),
     )
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
 
 
 def new_parcel(world, phone=ALICE):

@@ -15,6 +15,7 @@ from parcels.models import Parcel
 from parcels.pickup_code import pickup_code_matches
 from parcels.services import create_parcel, deposit_parcel
 from parcels.state_machine import MAX_PICKUP_ATTEMPTS
+from tests.helpers import client_for
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -29,12 +30,6 @@ ENDPOINTS = [
     ("post", "parcels/{tc}/deposit/"),
     ("post", "parcels/{tc}/pickup-code/"),
 ]
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
 
 
 def post(client, path, data=None, key="key-1"):
