@@ -41,6 +41,10 @@ def get(client, path):
     return client.get(BASE + path)
 
 
+def call(client, method, path):
+    return post(client, path) if method == "post" else get(client, path)
+
+
 def replayed(response):
     return response.headers.get("Idempotent-Replayed") == "true"
 
@@ -91,18 +95,13 @@ def deposited(staff):
 @pytest.mark.parametrize("method, path", ENDPOINTS)
 def test_anonymous_callers_are_refused(staff, method, path):
     url = path.format(tc=staff.tracking_code)
-    assert post(staff.anonymous, url).status_code == 401 if method == "post" else (
-        get(staff.anonymous, url).status_code == 401
-    )
+    assert call(staff.anonymous, method, url).status_code == 401
 
 
 @pytest.mark.parametrize("method, path", ENDPOINTS)
 def test_non_members_see_a_404(staff, method, path):
     url = path.format(tc=staff.tracking_code)
-    response = (
-        post(staff.outsider, url) if method == "post" else get(staff.outsider, url)
-    )
-    assert response.status_code == 404
+    assert call(staff.outsider, method, url).status_code == 404
 
 
 @pytest.mark.parametrize("role", ["admin", "operator"])
