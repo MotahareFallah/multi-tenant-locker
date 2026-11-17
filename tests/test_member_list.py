@@ -2,8 +2,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from organizations.models import Membership, Organization, Role
+from organizations.models import Membership, Role
 from organizations.services import add_member
+from tests.helpers import client_for, make_org_row
 
 pytestmark = pytest.mark.django_db
 
@@ -16,23 +17,9 @@ def make_user(number, full_name=""):
     )
 
 
-def make_org(slug):
-    # Only the row: these tests are about access, not about schemas.
-    organization = Organization(name=slug, slug=slug, schema_name=f"org_{slug}")
-    organization.auto_create_schema = False
-    organization.save()
-    return organization
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
-
-
 @pytest.fixture
 def acme():
-    return make_org("acme")
+    return make_org_row("acme")
 
 
 @pytest.fixture
@@ -74,7 +61,7 @@ def test_inactive_members_are_listed_and_marked(acme, admin):
 
 def test_members_of_other_organizations_are_not_listed(acme, admin):
     other = make_user(3)
-    add_member(organization=make_org("globex"), user=other, role=Role.ADMIN)
+    add_member(organization=make_org_row("globex"), user=other, role=Role.ADMIN)
     body = client_for(admin).get(URL).json()
     assert [m["phone_number"] for m in body] == ["+989120000001"]
 

@@ -2,8 +2,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from organizations.models import Membership, Organization, Role
+from organizations.models import Membership, Role
 from organizations.services import add_member
+from tests.helpers import client_for, make_org_row
 
 pytestmark = pytest.mark.django_db
 
@@ -12,27 +13,13 @@ LIST = "/api/v1/orgs/acme/members/"
 PHONE = "09123456789"
 
 
-def make_org(slug):
-    # Only the row: these tests are about the API, not about schemas.
-    organization = Organization(name=slug, slug=slug, schema_name=f"org_{slug}")
-    organization.auto_create_schema = False
-    organization.save()
-    return organization
-
-
 def make_user(number):
     return User.objects.create(phone_number=f"+98912000{number:04d}")
 
 
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
-
-
 @pytest.fixture
 def acme():
-    return make_org("acme")
+    return make_org_row("acme")
 
 
 @pytest.fixture
@@ -148,7 +135,7 @@ def test_an_empty_update_is_a_400(admin, acme):
 
 def test_a_member_of_another_organization_is_a_404(admin):
     other = add_member(
-        organization=make_org("globex"), user=make_user(5), role=Role.OPERATOR
+        organization=make_org_row("globex"), user=make_user(5), role=Role.OPERATOR
     )
     response = admin.client.patch(detail(other), {"role": "admin"}, format="json")
     assert response.status_code == 404

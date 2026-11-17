@@ -10,10 +10,11 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from rest_framework.views import APIView
 
-from organizations.models import Membership, Organization, Role
+from organizations.models import Membership, Role
 from organizations.permissions import IsOrgAdmin, IsOrgMember
 from organizations.services import add_member
 from organizations.views import TenantAPIView, TenantViewMixin
+from tests.helpers import client_for, make_org_row
 
 seen = []
 handled = []
@@ -86,23 +87,9 @@ def make_user(number):
     return get_user_model().objects.create(phone_number=f"+98912000{number:04d}")
 
 
-def make_org(slug):
-    # Only the row: these tests are about access, not about schemas.
-    organization = Organization(name=slug, slug=slug, schema_name=f"org_{slug}")
-    organization.auto_create_schema = False
-    organization.save()
-    return organization
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
-
-
 def member(role, number=1):
     user = make_user(number)
-    membership = add_member(organization=make_org("acme"), user=user, role=role)
+    membership = add_member(organization=make_org_row("acme"), user=user, role=role)
     return client_for(user), membership
 
 
@@ -134,7 +121,7 @@ def test_a_non_member_gets_a_404_not_a_403():
 
 
 def test_an_anonymous_request_gets_a_401():
-    make_org("acme")
+    make_org_row("acme")
     assert APIClient().get("/api/v1/orgs/acme/admin-only/").status_code == 401
 
 

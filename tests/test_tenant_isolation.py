@@ -9,11 +9,11 @@ from django.db import connection
 from django.urls import path
 from django_tenants.utils import tenant_context
 from rest_framework.response import Response
-from rest_framework.test import APIClient
 
 from organizations.models import Role
 from organizations.services import add_member
 from organizations.views import TenantAPIView
+from tests.helpers import client_for
 
 
 class ProbeView(TenantAPIView):
@@ -57,12 +57,6 @@ def two_orgs(make_org):
         with tenant_context(organization):
             ContentType.objects.create(app_label="probe", model=model)
     return SimpleNamespace(alice=alice, bob=bob, a=org_a, b=org_b)
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
 
 
 def test_each_member_sees_only_their_own_organizations_rows(two_orgs):
