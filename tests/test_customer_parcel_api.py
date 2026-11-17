@@ -10,6 +10,7 @@ from lockers.models import Compartment, CompartmentSize, Locker
 from organizations.models import Role
 from organizations.services import add_member
 from parcels.services import create_parcel, deposit_parcel
+from tests.helpers import client_for
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -26,12 +27,6 @@ CUSTOMER_FIELDS = {
     "expires_at",
     "created_at",
 }
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
 
 
 def get(client, org, path):

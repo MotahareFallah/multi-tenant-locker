@@ -4,23 +4,8 @@ from django.db.models import ProtectedError
 from django_tenants.utils import tenant_context
 
 from lockers.models import Compartment, CompartmentSize, Locker
-from organizations.services import create_organization
 
 pytestmark = pytest.mark.django_db(transaction=True)
-
-
-@pytest.fixture
-def make_org():
-    created = []
-
-    def make(slug):
-        organization = create_organization(name=slug, slug=slug)
-        created.append(organization)
-        return organization
-
-    yield make
-    for organization in created:
-        organization.delete(force_drop=True)
 
 
 def schemas_with_table(table):

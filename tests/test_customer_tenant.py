@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from organizations.models import Role
 from organizations.services import add_member
 from organizations.views import CustomerTenantMixin
+from tests.helpers import client_for
 
 
 class ProbeView(CustomerTenantMixin, APIView):
@@ -52,12 +53,6 @@ pytestmark = [
     pytest.mark.django_db(transaction=True),
     pytest.mark.urls(__name__),
 ]
-
-
-def client_for(user, **kwargs):
-    client = APIClient(**kwargs)
-    client.force_authenticate(user)
-    return client
 
 
 @pytest.fixture

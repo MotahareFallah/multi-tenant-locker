@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from lockers.models import Compartment, CompartmentSize, Locker
 from organizations.models import Role
 from organizations.services import add_member
+from tests.helpers import client_for
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -22,12 +23,6 @@ ENDPOINTS = [
     ("get", "lockers/main/compartments/1/"),
     ("patch", "lockers/main/compartments/1/"),
 ]
-
-
-def client_for(user):
-    client = APIClient()
-    client.force_authenticate(user)
-    return client
 
 
 def call(client, method, path, data=None):
