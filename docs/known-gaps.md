@@ -85,8 +85,8 @@ retried only by the operator re-sending the code (sign-in codes by asking again)
 
 Only `SimulatedDevice` exists. A driver implements the `DeviceClient` protocol
 (`open_door` that does not open twice for the same `command_id`) and is chosen
-with `DEVICE_BACKEND`. There is no deploy check yet that refuses the simulator in
-production.
+with `DEVICE_BACKEND`. `manage.py check --deploy` refuses the simulator in
+production (`parcels.E002`), so it cannot be deployed by accident.
 
 ### Smaller things
 

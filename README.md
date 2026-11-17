@@ -35,7 +35,8 @@ Requirements: [uv](https://docs.astral.sh/uv/) and Docker.
 PostgreSQL is required; SQLite is deliberately not supported (see ADR-0001).
 
     cp .env.example .env
-    # in .env, set DJANGO_SECRET_KEY and OTP_HMAC_KEY to two different random values
+    # in .env, set DJANGO_SECRET_KEY and OTP_HMAC_KEY to two different random values,
+    # for example: python3 -c "import secrets; print(secrets.token_urlsafe(50))"
     docker compose up -d
     uv sync
     uv run python manage.py check --database default
@@ -243,7 +244,18 @@ There is no deployment pipeline and no Dockerfile for the application:
 `docker-compose.yml` only starts PostgreSQL and Redis for development. Production
 settings are guarded by deploy checks, which `manage.py check --deploy` runs. They
 report the console SMS backend, an incomplete HTTP SMS configuration, a missing
-or weak `OTP_HMAC_KEY`, and `TRUSTED_PROXY_COUNT` left at 0.
+or weak `OTP_HMAC_KEY`, `TRUSTED_PROXY_COUNT` left at 0, the device simulator as
+`DEVICE_BACKEND` (`parcels.E002`), and an SSL redirect that would loop because
+`TRUSTED_PROXY_COUNT` is above 0 but `BEHIND_TLS_PROXY` is not set
+(`accounts.W002`). A `DEVICE_BACKEND` that cannot be imported is an error in every
+environment (`parcels.E001`).
+
+HTTPS hardening comes from the environment. `SECURE_SSL_REDIRECT`,
+`SESSION_COOKIE_SECURE` and `CSRF_COOKIE_SECURE` are on by default when
+`DJANGO_DEBUG` is off. `SECURE_HSTS_SECONDS` stays 0 until you choose a value,
+because a browser that has seen HSTS insists on HTTPS for that long.
+`BEHIND_TLS_PROXY=1` trusts `X-Forwarded-Proto` and is only safe behind a reverse
+proxy that terminates TLS and overwrites that header.
 
 ## Design decisions
 
