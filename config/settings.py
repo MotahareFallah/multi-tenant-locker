@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,8 +25,18 @@ SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
 if env.bool("BEHIND_TLS_PROXY", default=False):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Browser front ends served from another origin (the customer portal in
+# frontend/). Empty by default: no CORS headers are sent, so browsers keep blocking
+# cross-origin calls. Sign-in uses a Bearer header, not cookies, so credentials stay
+# off. Idempotency-Key is a custom header and must be allowed explicitly.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_URLS_REGEX = r"^/api/"
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
+CORS_EXPOSE_HEADERS = ["Idempotent-Replayed"]
+
 SHARED_APPS = [
     "django_tenants",  # must be first
+    "corsheaders",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -54,6 +65,7 @@ TENANT_MODEL = "organizations.Organization"
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
