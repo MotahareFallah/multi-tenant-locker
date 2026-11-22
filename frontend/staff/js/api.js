@@ -52,3 +52,8 @@ export const depositParcel = (org, trackingCode, key) => action(org, trackingCod
 
 // Text a new pickup code to the recipient. The code itself is never in the response.
 export const sendPickupCode = (org, trackingCode, key) => action(org, trackingCode, "pickup-code", key);
+
+// Admins only: the organization's members, in the order they were added.
+export function listMembers(org, page = 1) {
+  return authed(`${base(org)}/members/?page=${page}`);
+}

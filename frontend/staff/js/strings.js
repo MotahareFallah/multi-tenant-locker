@@ -41,6 +41,13 @@ export const text = {
   added: "Added",
   pickupAttempts: "Pickup attempts",
   wrongCodes: "Wrong codes",
+  membersNav: "Members",
+  membersTitle: "Members",
+  memberColumns: ["Phone number", "Name", "Role", "Status", "Added"],
+  active: "Active",
+  inactive: "Inactive",
+  emptyMembers: "No members yet.",
+  adminsOnly: "Only admins can manage members.",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -137,4 +144,12 @@ export function actionMessage(error) {
     if (error.status === 429) return "Too many requests. Wait a moment and try again.";
   }
   return "Something went wrong. Try again.";
+}
+
+export const memberCountText = (n) => (n === 1 ? "1 member" : `${n} members`);
+
+export function membersMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError && error.status === 403) return text.adminsOnly;
+  return "We couldn't load the members. Try again.";
 }
