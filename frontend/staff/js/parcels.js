@@ -103,7 +103,13 @@ export function parcelsView(app) {
   show(
     app.root,
     h("h1", {}, text.parcelsTitle),
-    h("div", { class: "toolbar" }, h("label", { class: "label", for: "status" }, text.statusFilter), select),
+    h(
+      "div",
+      { class: "toolbar" },
+      h("label", { class: "label", for: "status" }, text.statusFilter),
+      select,
+      h("a", { class: "button button--primary", href: "#/new" }, text.newParcel),
+    ),
     listBox,
   );
   reload();

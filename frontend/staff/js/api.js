@@ -20,3 +20,18 @@ export function listParcels(org, { status = "", page = 1 } = {}) {
   if (status) query.set("status", status);
   return authed(`${base(org)}/parcels/?${query}`);
 }
+
+// Admins only: the organization's lockers, to pick one when creating a parcel.
+export function listLockers(org) {
+  return authed(`${base(org)}/lockers/`);
+}
+
+// The idempotency key makes a repeated request safe: the server answers the first
+// attempt again instead of creating a second parcel.
+export function createParcel(org, body, idempotencyKey) {
+  return authed(`${base(org)}/parcels/`, {
+    method: "POST",
+    body,
+    headers: { "Idempotency-Key": idempotencyKey },
+  });
+}
