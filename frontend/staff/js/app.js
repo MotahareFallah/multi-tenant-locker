@@ -35,6 +35,7 @@ function drawTop() {
     h("a", { class: "brand", href: "#/" }, text.brand),
     app.org ? h("span", { class: "plate" }, app.org) : null,
     app.role ? h("span", { class: "plate" }, s.roleText(app.role)) : null,
+    app.role === "admin" ? h("a", { class: "link", href: "#/members" }, text.membersNav) : null,
     api.hasSession()
       ? h(
           "button",
