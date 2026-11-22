@@ -210,7 +210,10 @@ export function detailView(app, trackingCode) {
       h("p", { class: `badge badge--${st.tone}` }, st.label),
       h("p", {}, s.whereText(parcel)),
     );
-    const form = parcel.status === "READY_FOR_PICKUP" ? pickupForm(parcel, stage) : h("p", { class: "hint" }, parcel.status === "DELIVERED" || parcel.status === "EXPIRED" ? text.notReadyDone : text.notReady);
+    let form;
+    if (parcel.status === "READY_FOR_PICKUP") form = pickupForm(parcel, stage);
+    else if (note) form = null; // the note already says what happened
+    else form = h("p", { class: "hint" }, parcel.status === "DELIVERED" || parcel.status === "EXPIRED" ? text.notReadyDone : text.notReady);
     show(root, back, section, note ?? null, facts(parcel), form);
   }
 
