@@ -24,9 +24,10 @@ The aim is a backend whose guarantees are testable, not a set of CRUD endpoints:
 - Idempotency keys and row locking on pickup
 - Celery tasks: parcel expiry, recovery of stuck pickups and cleanup
 - Isolation, concurrency and failure tests on real PostgreSQL, plus CI
+- A small customer portal in `frontend/` (sign in, parcels, pickup)
 
 Deliberately out of scope for v1: notifications beyond the pickup SMS, a full
-transactional outbox, an admin UI or front end, billing, and a real SMS provider
+transactional outbox, a staff UI, billing, and a real SMS provider
 and device driver.
 
 ## Getting started
@@ -64,6 +65,7 @@ PostgreSQL is published on host port 5433 and Redis on 6379.
 - [x] HTTP API for staff and customers (ADR-0004)
 - [x] Celery: expiry, recovery of stuck pickups and cleanup
 - [x] Isolation, concurrency and failure test suite
+- [x] Customer portal (`frontend/`: sign in, parcels, pickup)
 - [ ] A real SMS provider and a real device driver (see Known gaps)
 
 ## Authentication
