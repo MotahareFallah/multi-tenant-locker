@@ -1,24 +1,8 @@
 import * as api from "./api.js";
 import { h, show } from "./dom.js";
+import { findOrg } from "./org.js";
 import * as s from "./strings.js";
 import { detailView, listView, orgView, signInView } from "./views.js";
-
-const ORG_KEY = "locker.org";
-const ORG_PATTERN = /^[-a-zA-Z0-9_]{1,64}$/;
-
-function findOrg() {
-  const fromUrl = new URLSearchParams(location.search).get("org");
-  try {
-    if (fromUrl && ORG_PATTERN.test(fromUrl)) {
-      sessionStorage.setItem(ORG_KEY, fromUrl);
-      return fromUrl;
-    }
-    const kept = sessionStorage.getItem(ORG_KEY);
-    return kept && ORG_PATTERN.test(kept) ? kept : null;
-  } catch {
-    return fromUrl && ORG_PATTERN.test(fromUrl) ? fromUrl : null;
-  }
-}
 
 const cleanups = [];
 const app = {
