@@ -16,9 +16,12 @@ export function homeView(app) {
   const token = app.token;
 
   async function load() {
-    show(app.root, h("h1", {}, text.brand), h("p", { class: "hint" }, text.loading));
+    if (!app.organization) show(app.root, h("h1", {}, text.brand), h("p", { class: "hint" }, text.loading));
     try {
-      const organization = await api.getOrganization(app.org);
+      // Asked once per sign-in, not on every page. The server still checks the
+      // membership on every request.
+      const organization = app.organization ?? (await api.getOrganization(app.org));
+      app.organization = organization;
       if (app.token !== token) return;
       app.role = organization.role;
       app.drawTop();
