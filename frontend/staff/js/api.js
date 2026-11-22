@@ -13,3 +13,10 @@ function base(org) {
 export function getOrganization(org) {
   return authed(`${base(org)}/`);
 }
+
+// One page of the organization's parcels, newest first, optionally of one status.
+export function listParcels(org, { status = "", page = 1 } = {}) {
+  const query = new URLSearchParams({ page: String(page) });
+  if (status) query.set("status", status);
+  return authed(`${base(org)}/parcels/?${query}`);
+}
