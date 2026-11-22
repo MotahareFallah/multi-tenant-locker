@@ -18,6 +18,15 @@ export const text = {
   empty: "No parcels yet.",
   emptyFiltered: "No parcels with this status.",
   columns: ["Tracking code", "Recipient", "Status", "Locker", "Size", "Collect by"],
+  newParcel: "New parcel",
+  backToParcels: "All parcels",
+  lockerLabel: "Locker",
+  lockerHelp: "The locker the parcel goes to.",
+  recipientLabel: "Recipient's mobile number",
+  recipientHelp: "They use this number to sign in and pick the parcel up.",
+  sizeLabel: "Size",
+  createParcel: "Create parcel",
+  creating: "Creating…",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -58,4 +67,36 @@ export function organizationMessage(error) {
 export function listMessage(error) {
   if (error instanceof NetworkError) return OFFLINE;
   return "We couldn't load the parcels. Try again.";
+}
+
+export const sizeOptions = [
+  ["SMALL", "Small"],
+  ["MEDIUM", "Medium"],
+  ["LARGE", "Large"],
+];
+
+export const createdText = (parcel) =>
+  `Parcel ${parcel.tracking_code} created for ${parcel.recipient_phone}. It is waiting to be put in a locker.`;
+
+// The API's validation errors are {"field": ["message", ...]}: show the messages.
+function fieldMessages(body) {
+  const parts = [];
+  for (const value of Object.values(body ?? {})) {
+    if (Array.isArray(value)) parts.push(...value.map(String));
+    else if (typeof value === "string") parts.push(value);
+  }
+  return parts.join(" ");
+}
+
+export function createMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the parcel was created. Press the button again; sending it twice is safe.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 409) return error.body?.detail || "The parcel can't be created right now.";
+    if (error.status === 403) return "You are not allowed to do this.";
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
 }
