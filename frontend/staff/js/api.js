@@ -57,3 +57,9 @@ export const sendPickupCode = (org, trackingCode, key) => action(org, trackingCo
 export function listMembers(org, page = 1) {
   return authed(`${base(org)}/members/?page=${page}`);
 }
+
+// Admins only: give a phone number a role in the organization. The server creates
+// the account if needed and rejects a number that is already a member.
+export function addMember(org, body) {
+  return authed(`${base(org)}/members/`, { method: "POST", body });
+}

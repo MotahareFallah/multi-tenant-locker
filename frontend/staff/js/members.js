@@ -1,5 +1,5 @@
 import { h, show } from "../../js/dom.js";
-import { SessionEnded } from "../../js/errors.js";
+import { NetworkError, SessionEnded } from "../../js/errors.js";
 import * as api from "./api.js";
 import * as s from "./strings.js";
 
@@ -69,20 +69,67 @@ export function membersView(app) {
     } catch (error) {
       if (app.token !== token) return;
       if (error instanceof SessionEnded) return app.signedOut(text.sessionEnded);
+      const message = s.membersMessage(error);
       draw(
         h(
           "div",
           {},
-          h("p", { class: "message message--error", role: "alert" }, s.membersMessage(error)),
-          s.membersMessage(error) === text.adminsOnly
-            ? null
-            : h("button", { class: "button", type: "button", onclick: () => load(n) }, text.retry),
+          h("p", { class: "message message--error", role: "alert" }, message),
+          message === text.adminsOnly ? null : h("button", { class: "button", type: "button", onclick: () => load(n) }, text.retry),
         ),
       );
     }
   }
 
-  show(app.root, h("h1", {}, text.membersTitle), listBox);
-  show(listBox, h("p", { class: "hint" }, text.loading));
-  load(1);
+  function reload() {
+    rows = [];
+    next = null;
+    show(listBox, h("p", { class: "hint" }, text.loading));
+    load(1);
+  }
+
+  function addForm() {
+    const feedback = h("div", { class: "feedback" });
+    const phone = h("input", { class: "input", id: "member-phone", type: "tel", inputmode: "tel", autocomplete: "off", required: true });
+    const role = h("select", { class: "select", id: "member-role" }, s.memberRoleOptions.map(([value, label]) => h("option", { value }, label)));
+    const button = h("button", { class: "button button--primary", type: "submit" }, text.addMember);
+    return h(
+      "form",
+      {
+        class: "form",
+        onsubmit: async (event) => {
+          event.preventDefault();
+          button.disabled = true;
+          button.textContent = text.adding;
+          show(feedback, null);
+          try {
+            const member = await api.addMember(app.org, { phone_number: phone.value.trim(), role: role.value });
+            if (app.token !== token) return;
+            phone.value = "";
+            show(feedback, h("p", { class: "message message--ok", role: "status" }, s.addedText(member)));
+            reload();
+          } catch (error) {
+            if (app.token !== token) return;
+            if (error instanceof SessionEnded) return app.signedOut(text.sessionEnded);
+            show(feedback, h("p", { class: "message message--error", role: "alert" }, s.addMemberMessage(error)));
+          } finally {
+            if (app.token === token) {
+              button.disabled = false;
+              button.textContent = text.addMember;
+            }
+          }
+        },
+      },
+      h("h2", {}, text.addMemberTitle),
+      h("label", { class: "label", for: "member-phone" }, text.memberPhoneLabel),
+      phone,
+      h("label", { class: "label", for: "member-role" }, text.memberRoleLabel),
+      role,
+      feedback,
+      button,
+    );
+  }
+
+  show(app.root, h("h1", {}, text.membersTitle), app.role === "admin" ? addForm() : null, listBox);
+  reload();
 }

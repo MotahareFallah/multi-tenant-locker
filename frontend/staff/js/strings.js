@@ -48,6 +48,11 @@ export const text = {
   inactive: "Inactive",
   emptyMembers: "No members yet.",
   adminsOnly: "Only admins can manage members.",
+  addMemberTitle: "Add a member",
+  memberPhoneLabel: "Mobile number",
+  memberRoleLabel: "Role",
+  addMember: "Add member",
+  adding: "Adding…",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -152,4 +157,23 @@ export function membersMessage(error) {
   if (error instanceof NetworkError) return OFFLINE;
   if (error instanceof ApiError && error.status === 403) return text.adminsOnly;
   return "We couldn't load the members. Try again.";
+}
+
+export const memberRoleOptions = [
+  ["operator", "Operator"],
+  ["admin", "Admin"],
+];
+
+export const addedText = (member) => `Added ${member.phone_number} as ${roleText(member.role)}.`;
+
+export function addMemberMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the member was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
 }
