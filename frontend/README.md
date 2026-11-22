@@ -17,3 +17,12 @@ sign-in code is printed in the API's log. The API address is `API_BASE` in
 The access token is kept in memory and the refresh token in `sessionStorage`.
 Every pickup request carries an `Idempotency-Key`, so a retry after a dropped
 connection never opens the door twice. Fonts are self-hosted (OFL, see `fonts/`).
+
+## Staff panel
+
+`staff/` is for an organization's members: list parcels (filter by status), create
+one, put it into a locker and text its pickup code. It signs in the same way, with a
+phone number, and uses the same API; what a member may do is still decided by the
+server. Open `http://127.0.0.1:8080/staff/?org=<organization slug>`. A number that is
+not a member of the organization is told so; admins add members through the API
+(`POST members/`), there is no screen for that yet.
