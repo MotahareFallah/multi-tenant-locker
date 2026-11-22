@@ -36,7 +36,7 @@ export function parcelsView(app) {
     return h(
       "tr",
       {},
-      h("td", {}, h("span", { class: "code" }, parcel.tracking_code)),
+      h("td", {}, h("a", { class: "code", href: `#/parcels/${encodeURIComponent(parcel.tracking_code)}` }, parcel.tracking_code)),
       h("td", {}, parcel.recipient_phone),
       h("td", {}, h("span", { class: `badge badge--${st.tone}` }, st.label)),
       h("td", {}, s.whereText(parcel)),

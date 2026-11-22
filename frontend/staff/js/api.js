@@ -35,3 +35,20 @@ export function createParcel(org, body, idempotencyKey) {
     headers: { "Idempotency-Key": idempotencyKey },
   });
 }
+
+export function getParcel(org, trackingCode) {
+  return authed(`${base(org)}/parcels/${encodeURIComponent(trackingCode)}/`);
+}
+
+function action(org, trackingCode, name, idempotencyKey) {
+  return authed(`${base(org)}/parcels/${encodeURIComponent(trackingCode)}/${name}/`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+  });
+}
+
+// Put the parcel into a free compartment of its size.
+export const depositParcel = (org, trackingCode, key) => action(org, trackingCode, "deposit", key);
+
+// Text a new pickup code to the recipient. The code itself is never in the response.
+export const sendPickupCode = (org, trackingCode, key) => action(org, trackingCode, "pickup-code", key);

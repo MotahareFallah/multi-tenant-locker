@@ -3,6 +3,7 @@ import { ApiError, SessionEnded } from "../../js/errors.js";
 import * as api from "./api.js";
 import * as s from "./strings.js";
 import { newParcelView } from "./new-parcel.js";
+import { parcelView } from "./parcel.js";
 import { parcelsView } from "./parcels.js";
 
 const { text } = s;
@@ -22,7 +23,9 @@ export function homeView(app) {
       app.role = organization.role;
       app.drawTop();
       document.title = `${organization.name} · ${text.brand}`;
+      const parcel = /^#\/parcels\/([^/]+)$/.exec(location.hash);
       if (location.hash === "#/new") newParcelView(app);
+      else if (parcel) parcelView(app, decodeURIComponent(parcel[1]));
       else parcelsView(app);
     } catch (error) {
       if (app.token !== token) return;
