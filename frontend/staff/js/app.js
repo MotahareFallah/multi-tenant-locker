@@ -22,6 +22,7 @@ const app = {
     app.navigate("#/");
     render({ notice });
   },
+  wide: (on) => document.querySelector(".app").classList.toggle("app--wide", on),
   drawTop: () => drawTop(),
   render: (options) => render(options),
 };
@@ -53,6 +54,7 @@ function drawTop() {
 function render({ moved = false, notice = null } = {}) {
   while (cleanups.length) cleanups.pop()();
   app.token = Symbol("view");
+  app.wide(false);
   drawTop();
   if (!app.org) {
     orgView(app.root);
