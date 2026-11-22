@@ -11,6 +11,7 @@ const cleanups = [];
 const app = {
   org: findOrg(),
   role: null,
+  organization: null,
   root: document.getElementById("view"),
   token: Symbol("view"),
   onLeave: (fn) => cleanups.push(fn),
@@ -19,6 +20,7 @@ const app = {
   },
   signedOut: (notice) => {
     app.role = null;
+    app.organization = null;
     app.navigate("#/");
     render({ notice });
   },
