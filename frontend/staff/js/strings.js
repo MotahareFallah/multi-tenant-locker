@@ -27,6 +27,20 @@ export const text = {
   sizeLabel: "Size",
   createParcel: "Create parcel",
   creating: "Creating…",
+  putInLocker: "Put in locker",
+  sendCode: "Send pickup code",
+  resendCode: "Send a new pickup code",
+  working: "Working…",
+  actions: "Actions",
+  history: "History",
+  historyColumns: ["When", "Change", "By", "Reason"],
+  recipient: "Recipient",
+  locker: "Locker",
+  size: "Size",
+  expires: "Collect by",
+  added: "Added",
+  pickupAttempts: "Pickup attempts",
+  wrongCodes: "Wrong codes",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -95,6 +109,30 @@ export function createMessage(error) {
   if (error instanceof ApiError) {
     if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
     if (error.status === 409) return error.body?.detail || "The parcel can't be created right now.";
+    if (error.status === 403) return "You are not allowed to do this.";
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+export const depositedText = (parcel) => `Put in ${parcel.locker}, compartment ${parcel.compartment}.`;
+
+export const codeSentText = (parcel) => `A pickup code was texted to ${parcel.recipient_phone}.`;
+
+export function parcelMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError && error.status === 404) return "We couldn't find this parcel.";
+  return "We couldn't load the parcel. Try again.";
+}
+
+export function actionMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if it went through. Press the button again; sending it twice is safe.";
+  }
+  if (error instanceof ApiError) {
+    if (error.code === "sms_delivery_failed") return "The code could not be sent by text message. Try again.";
+    if (error.status === 409) return error.body?.detail || "This can't be done in the parcel's current state.";
+    if (error.status === 404) return "We couldn't find this parcel.";
     if (error.status === 403) return "You are not allowed to do this.";
     if (error.status === 429) return "Too many requests. Wait a moment and try again.";
   }
