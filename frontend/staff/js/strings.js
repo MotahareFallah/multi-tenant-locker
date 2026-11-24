@@ -41,6 +41,22 @@ export const text = {
   added: "Added",
   pickupAttempts: "Pickup attempts",
   wrongCodes: "Wrong codes",
+  membersNav: "Members",
+  membersTitle: "Members",
+  memberColumns: ["Phone number", "Name", "Role", "Status", "Added", "Actions"],
+  active: "Active",
+  inactive: "Inactive",
+  emptyMembers: "No members yet.",
+  adminsOnly: "Only admins can manage members.",
+  addMemberTitle: "Add a member",
+  memberPhoneLabel: "Mobile number",
+  memberRoleLabel: "Role",
+  addMember: "Add member",
+  adding: "Adding…",
+  makeAdmin: "Make admin",
+  makeOperator: "Make operator",
+  deactivate: "Deactivate",
+  reactivate: "Reactivate",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -134,6 +150,51 @@ export function actionMessage(error) {
     if (error.status === 409) return error.body?.detail || "This can't be done in the parcel's current state.";
     if (error.status === 404) return "We couldn't find this parcel.";
     if (error.status === 403) return "You are not allowed to do this.";
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+export const memberCountText = (n) => (n === 1 ? "1 member" : `${n} members`);
+
+export function membersMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError && error.status === 403) return text.adminsOnly;
+  return "We couldn't load the members. Try again.";
+}
+
+export const memberRoleOptions = [
+  ["operator", "Operator"],
+  ["admin", "Admin"],
+];
+
+export const addedText = (member) => `Added ${member.phone_number} as ${roleText(member.role)}.`;
+
+export function addMemberMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the member was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+export const roleChangedText = (member) => `${member.phone_number} is now ${roleText(member.role)}.`;
+
+export const activeChangedText = (member) => `${member.phone_number} is now ${member.is_active ? "active" : "inactive"}.`;
+
+export function updateMemberMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the change was made. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 409) return error.body?.detail || "This change is not allowed.";
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 404) return "We couldn't find this member.";
+    if (error.status === 403) return text.adminsOnly;
     if (error.status === 429) return "Too many requests. Wait a moment and try again.";
   }
   return "Something went wrong. Try again.";
