@@ -63,3 +63,9 @@ export function listMembers(org, page = 1) {
 export function addMember(org, body) {
   return authed(`${base(org)}/members/`, { method: "POST", body });
 }
+
+// Admins only: change a member's role and/or switch them on or off. Members are
+// never deleted. The server refuses to leave the organization without an active admin.
+export function updateMember(org, memberId, body) {
+  return authed(`${base(org)}/members/${memberId}/`, { method: "PATCH", body });
+}

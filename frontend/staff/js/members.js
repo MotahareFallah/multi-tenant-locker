@@ -5,6 +5,9 @@ import * as s from "./strings.js";
 
 const { text } = s;
 
+const message = (kind, body) =>
+  h("p", { class: `message message--${kind}`, role: kind === "error" ? "alert" : "status" }, body);
+
 // The organization's members. Only admins may see this; the server enforces it.
 export function membersView(app) {
   app.wide(true);
@@ -15,6 +18,41 @@ export function membersView(app) {
   let next = null;
 
   const listBox = h("div", {});
+  const notice = h("div", { class: "feedback" });
+
+  // One PATCH per click. The row is replaced with what the server answers.
+  async function change(member, patch, button, done) {
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = text.working;
+    show(notice, null);
+    try {
+      const updated = await api.updateMember(app.org, member.id, patch);
+      if (app.token !== token) return;
+      rows = rows.map((item) => (item.id === updated.id ? updated : item));
+      draw();
+      show(notice, message("ok", done(updated)));
+    } catch (error) {
+      if (app.token !== token) return;
+      if (error instanceof SessionEnded) return app.signedOut(text.sessionEnded);
+      show(notice, message("error", s.updateMemberMessage(error)));
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  function actions(member) {
+    const isAdmin = member.role === "admin";
+    const roleButton = h("button", { class: "link", type: "button" }, isAdmin ? text.makeOperator : text.makeAdmin);
+    roleButton.addEventListener("click", () =>
+      change(member, { role: isAdmin ? "operator" : "admin" }, roleButton, s.roleChangedText),
+    );
+    const activeButton = h("button", { class: "link", type: "button" }, member.is_active ? text.deactivate : text.reactivate);
+    activeButton.addEventListener("click", () =>
+      change(member, { is_active: !member.is_active }, activeButton, s.activeChangedText),
+    );
+    return h("div", { class: "row-actions" }, roleButton, activeButton);
+  }
 
   function row(member) {
     return h(
@@ -29,6 +67,7 @@ export function membersView(app) {
         h("span", { class: `badge badge--${member.is_active ? "ready" : "done"}` }, member.is_active ? text.active : text.inactive),
       ),
       h("td", {}, s.formatWhen(member.created_at)),
+      h("td", {}, actions(member)),
     );
   }
 
@@ -130,6 +169,6 @@ export function membersView(app) {
     );
   }
 
-  show(app.root, h("h1", {}, text.membersTitle), app.role === "admin" ? addForm() : null, listBox);
+  show(app.root, h("h1", {}, text.membersTitle), app.role === "admin" ? addForm() : null, notice, listBox);
   reload();
 }
