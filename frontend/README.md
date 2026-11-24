@@ -24,5 +24,6 @@ connection never opens the door twice. Fonts are self-hosted (OFL, see `fonts/`)
 one, put it into a locker and text its pickup code. It signs in the same way, with a
 phone number, and uses the same API; what a member may do is still decided by the
 server. Open `http://127.0.0.1:8080/staff/?org=<organization slug>`. A number that is
-not a member of the organization is told so; admins add members through the API
-(`POST members/`), there is no screen for that yet.
+not a member of the organization is told so. Admins also get a Members page: add a
+member, change a role, switch a member on or off. The server refuses to leave the
+organization without an active admin.
