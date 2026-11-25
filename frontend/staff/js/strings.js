@@ -61,6 +61,12 @@ export const text = {
   lockersTitle: "Lockers",
   lockerColumns: ["Code", "Name", "Address", "Status"],
   emptyLockers: "No lockers yet.",
+  addLockerTitle: "Add a locker",
+  lockerCodeLabel: "Code",
+  lockerCodeHelp: "A short name without spaces, such as north-gate. It can't be changed later.",
+  lockerNameLabel: "Name",
+  lockerAddressLabel: "Address",
+  addLocker: "Add locker",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -210,4 +216,18 @@ export function lockersMessage(error) {
   if (error instanceof NetworkError) return OFFLINE;
   if (error instanceof ApiError && error.status === 403) return text.adminsOnly;
   return "We couldn't load the lockers. Try again.";
+}
+
+export const lockerAddedText = (locker) => `Added locker ${locker.code}.`;
+
+export function addLockerMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the locker was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
 }
