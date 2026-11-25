@@ -57,6 +57,24 @@ export const text = {
   makeOperator: "Make operator",
   deactivate: "Deactivate",
   reactivate: "Reactivate",
+  lockersNav: "Lockers",
+  lockersTitle: "Lockers",
+  lockerColumns: ["Code", "Name", "Address", "Status"],
+  emptyLockers: "No lockers yet.",
+  addLockerTitle: "Add a locker",
+  lockerCodeLabel: "Code",
+  lockerCodeHelp: "A short name without spaces, such as north-gate. It can't be changed later.",
+  lockerNameLabel: "Name",
+  lockerAddressLabel: "Address",
+  addLocker: "Add locker",
+  backToLockers: "All lockers",
+  compartmentsTitle: "Compartments",
+  compartmentColumns: ["Number", "Size", "Status", "Actions"],
+  emptyCompartments: "No compartments yet.",
+  addCompartmentTitle: "Add a compartment",
+  compartmentNumberLabel: "Number",
+  compartmentNumberHelp: "The number on the door. It can't be changed later.",
+  addCompartment: "Add compartment",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -195,6 +213,76 @@ export function updateMemberMessage(error) {
     if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
     if (error.status === 404) return "We couldn't find this member.";
     if (error.status === 403) return text.adminsOnly;
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+export const lockerCountText = (n) => (n === 1 ? "1 locker" : `${n} lockers`);
+
+export function lockersMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError && error.status === 403) return text.adminsOnly;
+  return "We couldn't load the lockers. Try again.";
+}
+
+export const lockerAddedText = (locker) => `Added locker ${locker.code}.`;
+
+export function addLockerMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the locker was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+export const compartmentCountText = (n) => (n === 1 ? "1 compartment" : `${n} compartments`);
+
+export const sizeText = (size) => sizeOptions.find(([value]) => value === size)?.[1] ?? String(size);
+
+export function lockerMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError) {
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 404) return "This locker doesn't exist.";
+  }
+  return "We couldn't load the locker. Try again.";
+}
+
+export const compartmentAddedText = (compartment) => `Added compartment ${compartment.number}.`;
+
+export function addCompartmentMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the compartment was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 404) return "This locker doesn't exist.";
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+const stateText = (on) => (on ? "active" : "inactive");
+
+export const lockerChangedText = (locker) => `${locker.code} is now ${stateText(locker.is_active)}.`;
+
+export const compartmentChangedText = (compartment) =>
+  `Compartment ${compartment.number} is now ${stateText(compartment.is_active)}.`;
+
+export function updateLockerMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the change was made. Check the page, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 404) return "This locker doesn't exist.";
     if (error.status === 429) return "Too many requests. Wait a moment and try again.";
   }
   return "Something went wrong. Try again.";
