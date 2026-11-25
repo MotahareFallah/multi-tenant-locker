@@ -27,3 +27,7 @@ server. Open `http://127.0.0.1:8080/staff/?org=<organization slug>`. A number th
 not a member of the organization is told so. Admins also get a Members page: add a
 member, change a role, switch a member on or off. The server refuses to leave the
 organization without an active admin.
+
+Admins also get a Lockers page: add a locker, open one to add compartments, and
+switch lockers and compartments on or off. A locker's code and a compartment's
+number and size cannot be changed, and nothing is deleted.
