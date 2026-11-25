@@ -77,6 +77,49 @@ export function lockerView(app, code) {
     }
   }
 
-  show(app.root, h("a", { class: "link", href: "#/lockers" }, text.backToLockers), h("h1", {}, code), box);
+  function addForm() {
+    const feedback = h("div", { class: "feedback" });
+    const number = h("input", { class: "input", id: "compartment-number", type: "number", min: "1", step: "1", inputmode: "numeric", autocomplete: "off", required: true });
+    const size = h("select", { class: "select", id: "compartment-size" }, s.sizeOptions.map(([value, label]) => h("option", { value }, label)));
+    const button = h("button", { class: "button button--primary", type: "submit" }, text.addCompartment);
+    return h(
+      "form",
+      {
+        class: "form",
+        onsubmit: async (event) => {
+          event.preventDefault();
+          button.disabled = true;
+          button.textContent = text.adding;
+          show(feedback, null);
+          try {
+            const compartment = await api.addCompartment(app.org, code, { number: Number(number.value), size: size.value });
+            if (app.token !== token) return;
+            number.value = "";
+            show(feedback, h("p", { class: "message message--ok", role: "status" }, s.compartmentAddedText(compartment)));
+            load();
+          } catch (error) {
+            if (app.token !== token) return;
+            if (error instanceof SessionEnded) return app.signedOut(text.sessionEnded);
+            show(feedback, h("p", { class: "message message--error", role: "alert" }, s.addCompartmentMessage(error)));
+          } finally {
+            if (app.token === token) {
+              button.disabled = false;
+              button.textContent = text.addCompartment;
+            }
+          }
+        },
+      },
+      h("h2", {}, text.addCompartmentTitle),
+      h("label", { class: "label", for: "compartment-number" }, text.compartmentNumberLabel),
+      number,
+      h("p", { class: "hint" }, text.compartmentNumberHelp),
+      h("label", { class: "label", for: "compartment-size" }, text.sizeLabel),
+      size,
+      feedback,
+      button,
+    );
+  }
+
+  show(app.root, h("a", { class: "link", href: "#/lockers" }, text.backToLockers), h("h1", {}, code), box, addForm());
   load();
 }
