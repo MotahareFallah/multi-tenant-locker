@@ -67,6 +67,10 @@ export const text = {
   lockerNameLabel: "Name",
   lockerAddressLabel: "Address",
   addLocker: "Add locker",
+  backToLockers: "All lockers",
+  compartmentsTitle: "Compartments",
+  compartmentColumns: ["Number", "Size", "Status"],
+  emptyCompartments: "No compartments yet.",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -230,4 +234,17 @@ export function addLockerMessage(error) {
     if (error.status === 429) return "Too many requests. Wait a moment and try again.";
   }
   return "Something went wrong. Try again.";
+}
+
+export const compartmentCountText = (n) => (n === 1 ? "1 compartment" : `${n} compartments`);
+
+export const sizeText = (size) => sizeOptions.find(([value]) => value === size)?.[1] ?? String(size);
+
+export function lockerMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError) {
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 404) return "This locker doesn't exist.";
+  }
+  return "We couldn't load the locker. Try again.";
 }
