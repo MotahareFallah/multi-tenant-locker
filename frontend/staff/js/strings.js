@@ -57,6 +57,10 @@ export const text = {
   makeOperator: "Make operator",
   deactivate: "Deactivate",
   reactivate: "Reactivate",
+  lockersNav: "Lockers",
+  lockersTitle: "Lockers",
+  lockerColumns: ["Code", "Name", "Address", "Status"],
+  emptyLockers: "No lockers yet.",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -198,4 +202,12 @@ export function updateMemberMessage(error) {
     if (error.status === 429) return "Too many requests. Wait a moment and try again.";
   }
   return "Something went wrong. Try again.";
+}
+
+export const lockerCountText = (n) => (n === 1 ? "1 locker" : `${n} lockers`);
+
+export function lockersMessage(error) {
+  if (error instanceof NetworkError) return OFFLINE;
+  if (error instanceof ApiError && error.status === 403) return text.adminsOnly;
+  return "We couldn't load the lockers. Try again.";
 }
