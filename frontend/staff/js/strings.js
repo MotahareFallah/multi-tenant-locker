@@ -71,6 +71,10 @@ export const text = {
   compartmentsTitle: "Compartments",
   compartmentColumns: ["Number", "Size", "Status"],
   emptyCompartments: "No compartments yet.",
+  addCompartmentTitle: "Add a compartment",
+  compartmentNumberLabel: "Number",
+  compartmentNumberHelp: "The number on the door. It can't be changed later.",
+  addCompartment: "Add compartment",
 };
 
 // Staff see the real state names; customers get friendlier words.
@@ -247,4 +251,19 @@ export function lockerMessage(error) {
     if (error.status === 404) return "This locker doesn't exist.";
   }
   return "We couldn't load the locker. Try again.";
+}
+
+export const compartmentAddedText = (compartment) => `Added compartment ${compartment.number}.`;
+
+export function addCompartmentMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the compartment was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 404) return "This locker doesn't exist.";
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
 }
