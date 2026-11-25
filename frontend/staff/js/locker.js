@@ -10,6 +10,62 @@ export function lockerView(app, code) {
   app.wide(true);
   const token = app.token;
   const box = h("div", {});
+  const notice = h("div", { class: "feedback" });
+  let current = null;
+
+  // One PATCH per click. The page is drawn again from what the server answers.
+  async function change(button, send, apply, done) {
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = text.working;
+    show(notice, null);
+    try {
+      const updated = await send();
+      if (app.token !== token) return;
+      apply(updated);
+      draw(current);
+      show(notice, h("p", { class: "message message--ok", role: "status" }, done(updated)));
+    } catch (error) {
+      if (app.token !== token) return;
+      if (error instanceof SessionEnded) return app.signedOut(text.sessionEnded);
+      show(notice, h("p", { class: "message message--error", role: "alert" }, s.updateLockerMessage(error)));
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  function lockerButton(locker) {
+    const button = h("button", { class: "link", type: "button" }, locker.is_active ? text.deactivate : text.reactivate);
+    button.addEventListener("click", () =>
+      change(
+        button,
+        () => api.updateLocker(app.org, code, { is_active: !locker.is_active }),
+        (updated) => {
+          current = updated;
+        },
+        s.lockerChangedText,
+      ),
+    );
+    return button;
+  }
+
+  function compartmentButton(compartment) {
+    const button = h("button", { class: "link", type: "button" }, compartment.is_active ? text.deactivate : text.reactivate);
+    button.addEventListener("click", () =>
+      change(
+        button,
+        () => api.updateCompartment(app.org, code, compartment.number, { is_active: !compartment.is_active }),
+        (updated) => {
+          current = {
+            ...current,
+            compartments: current.compartments.map((item) => (item.number === updated.number ? updated : item)),
+          };
+        },
+        s.compartmentChangedText,
+      ),
+    );
+    return button;
+  }
 
   function draw(locker) {
     if (app.token !== token) return;
@@ -17,9 +73,10 @@ export function lockerView(app, code) {
     show(
       box,
       h(
-        "p",
-        {},
+        "div",
+        { class: "row-actions" },
         h("span", { class: `badge badge--${locker.is_active ? "ready" : "done"}` }, locker.is_active ? text.active : text.inactive),
+        lockerButton(locker),
       ),
       h("p", {}, `${text.lockerNameLabel}: ${locker.name || "–"}`),
       h("p", {}, `${text.lockerAddressLabel}: ${locker.address || "–"}`),
@@ -50,6 +107,7 @@ export function lockerView(app, code) {
                       {},
                       h("span", { class: `badge badge--${compartment.is_active ? "ready" : "done"}` }, compartment.is_active ? text.active : text.inactive),
                     ),
+                    h("td", {}, compartmentButton(compartment)),
                   ),
                 ),
               ),
@@ -64,6 +122,7 @@ export function lockerView(app, code) {
     try {
       const locker = await api.getLocker(app.org, code);
       if (app.token !== token) return;
+      current = locker;
       draw(locker);
     } catch (error) {
       if (app.token !== token) return;
@@ -120,6 +179,6 @@ export function lockerView(app, code) {
     );
   }
 
-  show(app.root, h("a", { class: "link", href: "#/lockers" }, text.backToLockers), h("h1", {}, code), box, addForm());
+  show(app.root, h("a", { class: "link", href: "#/lockers" }, text.backToLockers), h("h1", {}, code), notice, box, addForm());
   load();
 }

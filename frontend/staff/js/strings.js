@@ -69,7 +69,7 @@ export const text = {
   addLocker: "Add locker",
   backToLockers: "All lockers",
   compartmentsTitle: "Compartments",
-  compartmentColumns: ["Number", "Size", "Status"],
+  compartmentColumns: ["Number", "Size", "Status", "Actions"],
   emptyCompartments: "No compartments yet.",
   addCompartmentTitle: "Add a compartment",
   compartmentNumberLabel: "Number",
@@ -258,6 +258,26 @@ export const compartmentAddedText = (compartment) => `Added compartment ${compar
 export function addCompartmentMessage(error) {
   if (error instanceof NetworkError) {
     return "We lost the connection and don't know if the compartment was added. Check the list, then try again.";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
+    if (error.status === 403) return text.adminsOnly;
+    if (error.status === 404) return "This locker doesn't exist.";
+    if (error.status === 429) return "Too many requests. Wait a moment and try again.";
+  }
+  return "Something went wrong. Try again.";
+}
+
+const stateText = (on) => (on ? "active" : "inactive");
+
+export const lockerChangedText = (locker) => `${locker.code} is now ${stateText(locker.is_active)}.`;
+
+export const compartmentChangedText = (compartment) =>
+  `Compartment ${compartment.number} is now ${stateText(compartment.is_active)}.`;
+
+export function updateLockerMessage(error) {
+  if (error instanceof NetworkError) {
+    return "We lost the connection and don't know if the change was made. Check the page, then try again.";
   }
   if (error instanceof ApiError) {
     if (error.status === 400) return fieldMessages(error.body) || "Check the details and try again.";
