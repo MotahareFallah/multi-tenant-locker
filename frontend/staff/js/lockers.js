@@ -20,7 +20,7 @@ export function lockersView(app) {
     return h(
       "tr",
       {},
-      h("td", { class: "code" }, locker.code),
+      h("td", { class: "code" }, h("a", { class: "link", href: `#/lockers/${encodeURIComponent(locker.code)}` }, locker.code)),
       h("td", {}, locker.name || "–"),
       h("td", {}, locker.address || "–"),
       h(

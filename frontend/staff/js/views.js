@@ -2,6 +2,7 @@ import { h, show } from "../../js/dom.js";
 import { ApiError, SessionEnded } from "../../js/errors.js";
 import * as api from "./api.js";
 import * as s from "./strings.js";
+import { lockerView } from "./locker.js";
 import { lockersView } from "./lockers.js";
 import { membersView } from "./members.js";
 import { newParcelView } from "./new-parcel.js";
@@ -29,8 +30,10 @@ export function homeView(app) {
       app.drawTop();
       document.title = `${organization.name} · ${text.brand}`;
       const parcel = /^#\/parcels\/([^/]+)$/.exec(location.hash);
+      const locker = /^#\/lockers\/([^/]+)$/.exec(location.hash);
       if (location.hash === "#/new") newParcelView(app);
       else if (location.hash === "#/lockers") lockersView(app);
+      else if (locker) lockerView(app, decodeURIComponent(locker[1]));
       else if (location.hash === "#/members") membersView(app);
       else if (parcel) parcelView(app, decodeURIComponent(parcel[1]));
       else parcelsView(app);
