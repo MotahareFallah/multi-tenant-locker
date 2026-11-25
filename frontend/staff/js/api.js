@@ -21,9 +21,9 @@ export function listParcels(org, { status = "", page = 1 } = {}) {
   return authed(`${base(org)}/parcels/?${query}`);
 }
 
-// Admins only: the organization's lockers, to pick one when creating a parcel.
-export function listLockers(org) {
-  return authed(`${base(org)}/lockers/`);
+// Admins only: one page of the organization's lockers, in code order.
+export function listLockers(org, page = 1) {
+  return authed(`${base(org)}/lockers/?page=${page}`);
 }
 
 // The idempotency key makes a repeated request safe: the server answers the first
@@ -68,4 +68,35 @@ export function addMember(org, body) {
 // never deleted. The server refuses to leave the organization without an active admin.
 export function updateMember(org, memberId, body) {
   return authed(`${base(org)}/members/${memberId}/`, { method: "PATCH", body });
+}
+
+function lockerPath(org, code) {
+  return `${base(org)}/lockers/${encodeURIComponent(code)}`;
+}
+
+// Admins only: a locker with its compartments, in number order.
+export function getLocker(org, code) {
+  return authed(`${lockerPath(org, code)}/`);
+}
+
+// Admins only: add a locker. Its code is the short name used in URLs and cannot
+// be changed later.
+export function createLocker(org, body) {
+  return authed(`${base(org)}/lockers/`, { method: "POST", body });
+}
+
+// Admins only: rename a locker, change its address or switch it on or off.
+// Lockers are never deleted.
+export function updateLocker(org, code, body) {
+  return authed(`${lockerPath(org, code)}/`, { method: "PATCH", body });
+}
+
+// Admins only: add a compartment ({ number, size }). Numbers are unique per locker.
+export function addCompartment(org, code, body) {
+  return authed(`${lockerPath(org, code)}/compartments/`, { method: "POST", body });
+}
+
+// Admins only: switch a compartment on or off. Its number and size never change.
+export function updateCompartment(org, code, number, body) {
+  return authed(`${lockerPath(org, code)}/compartments/${number}/`, { method: "PATCH", body });
 }
