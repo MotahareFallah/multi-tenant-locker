@@ -179,6 +179,6 @@ export function lockerView(app, code) {
     );
   }
 
-  show(app.root, h("a", { class: "link", href: "#/lockers" }, text.backToLockers), h("h1", {}, code), notice, box, addForm());
+  show(app.root, h("a", { class: "back", href: "#/lockers" }, text.backToLockers), h("h1", {}, code), notice, box, addForm());
   load();
 }
