@@ -89,7 +89,7 @@ export function lockersView(app) {
   function addForm() {
     const feedback = h("div", { class: "feedback" });
     const code = h("input", { class: "input", id: "locker-code", type: "text", autocomplete: "off", autocapitalize: "off", spellcheck: "false", required: true });
-    const name = h("input", { class: "input", id: "locker-name", type: "text", autocomplete: "off" });
+    const name = h("input", { class: "input", id: "locker-name", type: "text", autocomplete: "off", required: true });
     const address = h("input", { class: "input", id: "locker-address", type: "text", autocomplete: "off" });
     const button = h("button", { class: "button button--primary", type: "submit" }, text.addLocker);
     return h(
@@ -101,9 +101,8 @@ export function lockersView(app) {
           button.disabled = true;
           button.textContent = text.adding;
           show(feedback, null);
-          // Empty optional fields are left out, so the server's own defaults apply.
-          const body = { code: code.value.trim() };
-          if (name.value.trim()) body.name = name.value.trim();
+          // The address is optional; when it is empty it is left out.
+          const body = { code: code.value.trim(), name: name.value.trim() };
           if (address.value.trim()) body.address = address.value.trim();
           try {
             const locker = await api.createLocker(app.org, body);
